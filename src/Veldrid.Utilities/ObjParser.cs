@@ -121,7 +121,7 @@ namespace Veldrid.Utilities
                         _currentGroupName = line.Substring(1, line.Length - 1).Trim();
                         break;
                     case "usemtl":
-                        ExpectExactly(pieces, 1, "usematl");
+                        ExpectAtLeast(pieces, 1, "usematl");
                         if (_currentMaterial != null)
                         {
                             string nextGroupName = _currentGroupName + "_Next";

@@ -74,7 +74,7 @@ namespace Veldrid.Utilities
 
             private readonly List<MaterialDefinition> _definitions = new List<MaterialDefinition>();
             private MaterialDefinition _currentDefinition;
-
+            private Dictionary<string, string> DictMatDef = new Dictionary<string, string> { };
             private int _currentLine;
             private string _currentLineText;
 
@@ -91,78 +91,99 @@ namespace Veldrid.Utilities
                 switch (pieces[0].ToLowerInvariant().Trim())
                 {
                     case "newmtl":
-                        ExpectExactly(pieces, 1, "newmtl");
+                        ExpectAtLeast(pieces, 1, "newmtl");
                         FinalizeCurrentMaterial();
-                        _currentDefinition = new MaterialDefinition(pieces[1]);
+                        if (!DictMatDef.ContainsKey(pieces[1]))
+                        {
+                            DictMatDef.Add(pieces[1], pieces[1]);
+                            _currentDefinition = new MaterialDefinition(pieces[1]);
+                        }
                         break;
                     case "ka":
                         ExpectExactly(pieces, 3, "Ka");
-                        _currentDefinition.AmbientReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Ka");
+                        if (_currentDefinition != null)
+                            _currentDefinition.AmbientReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Ka");
                         break;
                     case "kd":
                         ExpectExactly(pieces, 3, "Kd");
-                        _currentDefinition.DiffuseReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Kd");
+                        if (_currentDefinition != null)
+                            _currentDefinition.DiffuseReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Kd");
                         break;
                     case "ks":
                         ExpectExactly(pieces, 3, "Ks");
-                        _currentDefinition.SpecularReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Ks");
+                        if (_currentDefinition != null)
+                            _currentDefinition.SpecularReflectivity = ParseVector3(pieces[1], pieces[2], pieces[3], "Ks");
                         break;
                     case "ke": // Non-standard?
                         ExpectExactly(pieces, 3, "Ke");
-                        _currentDefinition.EmissiveCoefficient = ParseVector3(pieces[1], pieces[2], pieces[3], "Ks");
+                        if (_currentDefinition != null)
+                            _currentDefinition.EmissiveCoefficient = ParseVector3(pieces[1], pieces[2], pieces[3], "Ks");
                         break;
                     case "tf":
                         ExpectExactly(pieces, 3, "Tf");
-                        _currentDefinition.TransmissionFilter = ParseVector3(pieces[1], pieces[2], pieces[3], "Tf");
+                        if (_currentDefinition != null)
+                            _currentDefinition.TransmissionFilter = ParseVector3(pieces[1], pieces[2], pieces[3], "Tf");
                         break;
                     case "illum":
                         ExpectExactly(pieces, 1, "illum");
-                        _currentDefinition.IlluminationModel = ParseInt(pieces[1], "illum");
+                        if (_currentDefinition != null)
+                            _currentDefinition.IlluminationModel = ParseInt(pieces[1], "illum");
                         break;
                     case "d": // "Dissolve", or opacity
                         ExpectExactly(pieces, 1, "d");
-                        _currentDefinition.Opacity = ParseFloat(pieces[1], "d");
+                        if (_currentDefinition != null)
+                            _currentDefinition.Opacity = ParseFloat(pieces[1], "d");
                         break;
                     case "tr": // Transparency
                         ExpectExactly(pieces, 1, "Tr");
-                        _currentDefinition.Opacity = 1 - ParseFloat(pieces[1], "Tr");
+                        if (_currentDefinition != null)
+                            _currentDefinition.Opacity = 1 - ParseFloat(pieces[1], "Tr");
                         break;
                     case "ns":
                         ExpectExactly(pieces, 1, "Ns");
-                        _currentDefinition.SpecularExponent = ParseFloat(pieces[1], "Ns");
+                        if (_currentDefinition != null)
+                            _currentDefinition.SpecularExponent = ParseFloat(pieces[1], "Ns");
                         break;
                     case "sharpness":
                         ExpectExactly(pieces, 1, "sharpness");
-                        _currentDefinition.Sharpness = ParseFloat(pieces[1], "sharpness");
+                        if (_currentDefinition != null)
+                            _currentDefinition.Sharpness = ParseFloat(pieces[1], "sharpness");
                         break;
                     case "ni": // "Index of refraction"
                         ExpectExactly(pieces, 1, "Ni");
-                        _currentDefinition.OpticalDensity = ParseFloat(pieces[1], "Ni");
+                        if (_currentDefinition != null)
+                            _currentDefinition.OpticalDensity = ParseFloat(pieces[1], "Ni");
                         break;
                     case "map_ka":
                         ExpectExactly(pieces, 1, "map_ka");
-                        _currentDefinition.AmbientTexture = pieces[1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.AmbientTexture = pieces[1];
                         break;
                     case "map_kd":
                         ExpectExactly(pieces, 1, "map_kd");
-                        _currentDefinition.DiffuseTexture = pieces[1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.DiffuseTexture = pieces[1];
                         break;
                     case "map_ks":
                         ExpectExactly (pieces, 1, "map_ks");
-                        _currentDefinition.SpecularColorTexture = pieces [1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.SpecularColorTexture = pieces [1];
                         break;
                     case "map_bump":
                     case "bump":
                         ExpectExactly(pieces, 1, "map_bump");
-                        _currentDefinition.BumpMap = pieces[1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.BumpMap = pieces[1];
                         break;
                     case "map_d":
                         ExpectExactly(pieces, 1, "map_d");
-                        _currentDefinition.AlphaMap = pieces[1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.AlphaMap = pieces[1];
                         break;
                     case "map_ns":
                         ExpectExactly(pieces, 1, "map_ns");
-                        _currentDefinition.SpecularHighlightTexture = pieces[1];
+                        if (_currentDefinition != null)
+                            _currentDefinition.SpecularHighlightTexture = pieces[1];
                         break;
 
 
