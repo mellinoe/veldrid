@@ -468,7 +468,11 @@ namespace Veldrid.Vk
                     _surfaceExtensions.Add(CommonStrings.VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
                 }
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            else if (
+                #if NET5_0_OR_GREATER
+                OperatingSystem.IsAndroid() ||
+                #endif
+                RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 if (availableInstanceExtensions.Contains(CommonStrings.VK_KHR_ANDROID_SURFACE_EXTENSION_NAME))
                 {
@@ -1335,6 +1339,12 @@ namespace Veldrid.Vk
             {
                 return instanceExtensions.Contains(CommonStrings.VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
             }
+            #if NET5_0_OR_GREATER
+            else if (OperatingSystem.IsAndroid())
+            {
+                return instanceExtensions.Contains(CommonStrings.VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+            }
+            #endif
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 if (RuntimeInformation.OSDescription.Contains("Unix")) // Android
