@@ -593,6 +593,11 @@ namespace Veldrid.OpenGLBinding
         public static void glUseProgram(uint program) => p_glUseProgram(program);
 
         [UnmanagedFunctionPointer(CallConv)]
+        private delegate void glValidateProgram_t(uint program);
+        private static glValidateProgram_t p_glValidateProgram;
+        public static void glValidateProgram(uint program) => p_glValidateProgram(program);
+
+        [UnmanagedFunctionPointer(CallConv)]
         private delegate void glBindBufferRange_t(
             BufferRangeTarget target,
             uint index,
@@ -1792,6 +1797,7 @@ namespace Veldrid.OpenGLBinding
             LoadFunction("glGetUniformLocation", out p_glGetUniformLocation);
             LoadFunction("glGetAttribLocation", out p_glGetAttribLocation);
             LoadFunction("glUseProgram", out p_glUseProgram);
+            LoadFunction("glValidateProgram", out p_glValidateProgram);
             LoadFunction("glBindBufferRange", out p_glBindBufferRange);
             LoadFunction("glDebugMessageCallback", out p_glDebugMessageCallback);
             LoadFunction("glBufferData", out p_glBufferData);

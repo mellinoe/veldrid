@@ -25,6 +25,32 @@ namespace Veldrid.OpenGL
             }
         }
 
+        [Conditional("DEBUG")]
+        internal unsafe static void ValidateProgram(uint program)
+        {
+            glValidateProgram(program);
+
+            int validateStatus;
+            glGetProgramiv(program, GetProgramParameterName.ValidateStatus, &validateStatus);
+            CheckLastError();
+            if (validateStatus != 1)
+            {
+                if (Debugger.IsAttached)
+                {
+                    Debugger.Break();
+                }
+
+                byte* infoLog = stackalloc byte[4096];
+                uint bytesWritten;
+                glGetProgramInfoLog(program, 4096, &bytesWritten, infoLog);
+                CheckLastError();
+                string log = Encoding.UTF8.GetString(infoLog, (int)bytesWritten);
+                if(bytesWritten == 0)
+                    log = "Unknown";
+                throw new VeldridException($"Error validate GL program: {log}");
+            }
+        }
+
         internal static unsafe void SetObjectLabel(ObjectLabelIdentifier identifier, uint target, string name)
         {
             if (HasGlObjectLabel)

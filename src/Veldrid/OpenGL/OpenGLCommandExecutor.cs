@@ -681,6 +681,8 @@ namespace Veldrid.OpenGL
             glUseProgram(_graphicsPipeline.Program);
             CheckLastError();
 
+            ValidateProgram(_graphicsPipeline.Program);
+
             int vertexStridesCount = _graphicsPipeline.VertexStrides.Length;
             Util.EnsureArrayMinimumSize(ref _vertexBuffers, (uint)vertexStridesCount);
             Util.EnsureArrayMinimumSize(ref _vbOffsets, (uint)vertexStridesCount);
@@ -801,6 +803,8 @@ namespace Veldrid.OpenGL
             // Shader Set
             glUseProgram(_computePipeline.Program);
             CheckLastError();
+
+            ValidateProgram(_graphicsPipeline.Program);
         }
 
         public void SetGraphicsResourceSet(uint slot, ResourceSet rs, uint dynamicOffsetCount, ref uint dynamicOffsets)

@@ -142,6 +142,8 @@ namespace Veldrid.OpenGL
             glLinkProgram(_program);
             CheckLastError();
 
+            ValidateProgram(_program);
+
 #if DEBUG && GL_VALIDATE_VERTEX_INPUT_ELEMENTS
             slot = 0;
             foreach (VertexLayoutDescription layoutDesc in VertexLayouts)
@@ -180,6 +182,7 @@ namespace Veldrid.OpenGL
                 string log = Encoding.UTF8.GetString(infoLog, (int)bytesWritten);
                 throw new VeldridException($"Error linking GL program: {log}");
             }
+            ValidateProgram(_program);
 
             ProcessResourceSetLayouts(ResourceLayouts);
         }
