@@ -1,0 +1,14 @@
+name: Format check on pull request
+on: pull_request
+jobs:
+  dotnet-format:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Install dotnet-format
+        run: dotnet tool install -g dotnet-format
+
+      - name: Run dotnet format
+        run: dotnet format src --check
