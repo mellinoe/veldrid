@@ -127,6 +127,7 @@ namespace Veldrid.Vk
                 _device,
                 _physicalDevice,
                 _physicalDeviceProperties.limits.bufferImageGranularity,
+                1024,
                 _getBufferMemoryRequirements2,
                 _getImageMemoryRequirements2);
 

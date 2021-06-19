@@ -9,11 +9,10 @@ namespace Veldrid.Vk
 {
     internal unsafe class VkDeviceMemoryManager : IDisposable
     {
-        private const ulong MinDedicatedAllocationSizeDynamic = 1024 * 1024 * 64;
-        private const ulong MinDedicatedAllocationSizeNonDynamic = 1024 * 1024 * 256;
         private readonly VkDevice _device;
         private readonly VkPhysicalDevice _physicalDevice;
         private readonly ulong _bufferImageGranularity;
+        private readonly ulong _chunkGranularity;
         private readonly object _lock = new object();
         private ulong _totalAllocatedBytes;
         private readonly Dictionary<uint, ChunkAllocatorSet> _allocatorsByMemoryTypeUnmapped = new Dictionary<uint, ChunkAllocatorSet>();
@@ -26,12 +25,14 @@ namespace Veldrid.Vk
             VkDevice device,
             VkPhysicalDevice physicalDevice,
             ulong bufferImageGranularity,
+            ulong chunkGranularity,
             vkGetBufferMemoryRequirements2_t getBufferMemoryRequirements2,
             vkGetImageMemoryRequirements2_t getImageMemoryRequirements2)
         {
             _device = device;
             _physicalDevice = physicalDevice;
             _bufferImageGranularity = bufferImageGranularity;
+            _chunkGranularity = chunkGranularity;
             _getBufferMemoryRequirements2 = getBufferMemoryRequirements2;
             _getImageMemoryRequirements2 = getImageMemoryRequirements2;
         }
@@ -67,10 +68,6 @@ namespace Veldrid.Vk
             VkImage dedicatedImage,
             Vulkan.VkBuffer dedicatedBuffer)
         {
-            // Round up to the nearest multiple of bufferImageGranularity.
-            size = ((size / _bufferImageGranularity) + 1) * _bufferImageGranularity;
-            _totalAllocatedBytes += size;
-
             lock (_lock)
             {
                 if (!TryFindMemoryType(memProperties, memoryTypeBits, flags, out var memoryTypeIndex))
@@ -79,11 +76,15 @@ namespace Veldrid.Vk
                 }
 
                 ulong minDedicatedAllocationSize = persistentMapped
-                    ? MinDedicatedAllocationSizeDynamic
-                    : MinDedicatedAllocationSizeNonDynamic;
+                    ? ChunkAllocator.PersistentMappedChunkSize
+                    : ChunkAllocator.UnmappedChunkSize;
 
                 if (dedicated || size >= minDedicatedAllocationSize)
                 {
+                    // Round up to the nearest multiple of bufferImageGranularity.
+                    size = ((size / _bufferImageGranularity) + 1) * _bufferImageGranularity;
+                    _totalAllocatedBytes += size;
+
                     VkMemoryAllocateInfo allocateInfo = VkMemoryAllocateInfo.New();
                     allocateInfo.allocationSize = size;
                     allocateInfo.memoryTypeIndex = memoryTypeIndex;
@@ -117,6 +118,9 @@ namespace Veldrid.Vk
                 }
                 else
                 {
+                    size = ((size / _chunkGranularity) + 1) * _chunkGranularity;
+                    _totalAllocatedBytes += size;
+
                     ChunkAllocatorSet allocator = GetAllocator(memoryTypeIndex, persistentMapped);
                     bool result = allocator.Allocate(size, alignment, out VkMemoryBlock ret);
                     if (!result)
@@ -147,7 +151,8 @@ namespace Veldrid.Vk
 
         private ChunkAllocatorSet GetAllocator(uint memoryTypeIndex, bool persistentMapped)
         {
-            ChunkAllocatorSet ret = null;
+            ChunkAllocatorSet ret;
+
             if (persistentMapped)
             {
                 if (!_allocatorsByMemoryType.TryGetValue(memoryTypeIndex, out ret))
@@ -184,11 +189,20 @@ namespace Veldrid.Vk
 
             public bool Allocate(ulong size, ulong alignment, out VkMemoryBlock block)
             {
-                foreach (ChunkAllocator allocator in _allocators)
+                for (int i = 0; i < _allocators.Count; i++)
                 {
+                    ChunkAllocator allocator = _allocators[i];
                     if (allocator.Allocate(size, alignment, out block))
                     {
                         return true;
+                    }
+
+                    // Allocate may merge free blocks.
+                    if (allocator.IsFullFreeBlock())
+                    {
+                        allocator.Dispose();
+                        _allocators.RemoveAt(i);
+                        i--;
                     }
                 }
 
@@ -199,11 +213,12 @@ namespace Veldrid.Vk
 
             public void Free(VkMemoryBlock block)
             {
-                foreach (ChunkAllocator chunk in _allocators)
+                for (int i = 0; i < _allocators.Count; i++)
                 {
-                    if (chunk.Memory == block.DeviceMemory)
+                    ChunkAllocator allocator = _allocators[i];
+                    if (allocator.Memory == block.DeviceMemory)
                     {
-                        chunk.Free(block);
+                        allocator.Free(block);
                     }
                 }
             }
@@ -219,8 +234,9 @@ namespace Veldrid.Vk
 
         private class ChunkAllocator : IDisposable
         {
-            private const ulong PersistentMappedChunkSize = 1024 * 1024 * 64;
-            private const ulong UnmappedChunkSize = 1024 * 1024 * 256;
+            public const ulong PersistentMappedChunkSize = 1024 * 1024;
+            public const ulong UnmappedChunkSize = 1024 * 1024 * 4;
+
             private readonly VkDevice _device;
             private readonly uint _memoryTypeIndex;
             private readonly bool _persistentMapped;
@@ -229,7 +245,6 @@ namespace Veldrid.Vk
             private readonly void* _mappedPtr;
 
             private ulong _totalMemorySize;
-            private ulong _totalAllocatedBytes = 0;
 
             public VkDeviceMemory Memory => _memory;
 
@@ -268,97 +283,134 @@ namespace Veldrid.Vk
             {
                 checked
                 {
-                    for (int i = 0; i < _freeBlocks.Count; i++)
+                    List<VkMemoryBlock> freeBlocks = _freeBlocks;
+
+                    // Don't try merging blocks if there are none.
+                    bool hasMergedBlocks = freeBlocks.Count == 0;
+
+                    do
                     {
-                        VkMemoryBlock freeBlock = _freeBlocks[i];
-                        ulong alignedBlockSize = freeBlock.Size;
-                        if (freeBlock.Offset % alignment != 0)
+                        for (int i = 0; i < freeBlocks.Count; i++)
                         {
-                            ulong alignmentCorrection = (alignment - freeBlock.Offset % alignment);
-                            if (alignedBlockSize <= alignmentCorrection)
+                            VkMemoryBlock freeBlock = freeBlocks[i];
+                            ulong alignedBlockSize = freeBlock.Size;
+                            ulong alignedOffsetRemainder = freeBlock.Offset % alignment;
+                            if (alignedOffsetRemainder != 0)
                             {
-                                continue;
-                            }
-                            alignedBlockSize -= alignmentCorrection;
-                        }
-
-                        if (alignedBlockSize >= size) // Valid match -- split it and return.
-                        {
-                            _freeBlocks.RemoveAt(i);
-
-                            freeBlock.Size = alignedBlockSize;
-                            if ((freeBlock.Offset % alignment) != 0)
-                            {
-                                freeBlock.Offset += alignment - (freeBlock.Offset % alignment);
+                                ulong alignmentCorrection = alignment - alignedOffsetRemainder;
+                                if (alignedBlockSize <= alignmentCorrection)
+                                {
+                                    continue;
+                                }
+                                alignedBlockSize -= alignmentCorrection;
                             }
 
-                            block = freeBlock;
-
-                            if (alignedBlockSize != size)
+                            if (alignedBlockSize >= size) // Valid match -- split it and return.
                             {
-                                VkMemoryBlock splitBlock = new VkMemoryBlock(
-                                    freeBlock.DeviceMemory,
-                                    freeBlock.Offset + size,
-                                    freeBlock.Size - size,
-                                    _memoryTypeIndex,
-                                    freeBlock.BaseMappedPointer,
-                                    false);
-                                _freeBlocks.Insert(i, splitBlock);
                                 block = freeBlock;
-                                block.Size = size;
-                            }
+                                block.Size = alignedBlockSize;
+                                if (alignedOffsetRemainder != 0)
+                                {
+                                    block.Offset += alignment - alignedOffsetRemainder;
+                                }
+
+                                if (alignedBlockSize != size)
+                                {
+                                    VkMemoryBlock splitBlock = new VkMemoryBlock(
+                                        block.DeviceMemory,
+                                        block.Offset + size,
+                                        block.Size - size,
+                                        _memoryTypeIndex,
+                                        block.BaseMappedPointer,
+                                        false);
+
+                                    freeBlocks[i] = splitBlock;
+                                    block.Size = size;
+                                }
+                                else
+                                {
+                                    freeBlocks.RemoveAt(i);
+                                }
 
 #if DEBUG
-                            CheckAllocatedBlock(block);
+                                CheckAllocatedBlock(block);
 #endif
-                            _totalAllocatedBytes += alignedBlockSize;
-                            return true;
+                                return true;
+                            }
                         }
+
+                        if (hasMergedBlocks)
+                        {
+                            break;
+                        }
+                        hasMergedBlocks = MergeContiguousBlocks();
                     }
+                    while (hasMergedBlocks);
 
                     block = default(VkMemoryBlock);
                     return false;
                 }
             }
 
-            public void Free(VkMemoryBlock block)
+            private static int FindPrecedingBlockIndex(List<VkMemoryBlock> list, int length, ulong targetOffset)
             {
-                for (int i = 0; i < _freeBlocks.Count; i++)
+                int low = 0;
+                int high = length - 1;
+
+                if (length == 0 || list[high].Offset < targetOffset)
+                    return -1;
+
+                while (low <= high)
                 {
-                    if (_freeBlocks[i].Offset > block.Offset)
-                    {
-                        _freeBlocks.Insert(i, block);
-                        MergeContiguousBlocks();
-#if DEBUG
-                        RemoveAllocatedBlock(block);
-#endif
-                        return;
-                    }
+                    int mid = low + ((high - low) / 2);
+
+                    if (list[mid].Offset >= targetOffset)
+                        high = mid - 1;
+                    else
+                        low = mid + 1;
                 }
 
-                _freeBlocks.Add(block);
+                return high + 1;
+            }
+
+            public void Free(VkMemoryBlock block)
+            {
+                // Assume that _freeBlocks is always sorted.
+                int precedingBlock = FindPrecedingBlockIndex(_freeBlocks, _freeBlocks.Count, block.Offset);
+                if (precedingBlock != -1)
+                {
+                    _freeBlocks.Insert(precedingBlock, block);
+                }
+                else
+                {
+                    _freeBlocks.Add(block);
+                }
+
 #if DEBUG
                 RemoveAllocatedBlock(block);
 #endif
-                _totalAllocatedBytes -= block.Size;
             }
 
-            private void MergeContiguousBlocks()
+            private bool MergeContiguousBlocks()
             {
+                List<VkMemoryBlock> freeBlocks = _freeBlocks;
+                bool hasMerged = false;
                 int contiguousLength = 1;
-                for (int i = 0; i < _freeBlocks.Count - 1; i++)
+
+                for (int i = 0; i < freeBlocks.Count - 1; i++)
                 {
-                    ulong blockStart = _freeBlocks[i].Offset;
-                    while (i + contiguousLength < _freeBlocks.Count
-                        && _freeBlocks[i + contiguousLength - 1].End == _freeBlocks[i + contiguousLength].Offset)
+                    ulong blockStart = freeBlocks[i].Offset;
+                    while (i + contiguousLength < freeBlocks.Count
+                        && freeBlocks[i + contiguousLength - 1].End == freeBlocks[i + contiguousLength].Offset)
                     {
                         contiguousLength += 1;
                     }
 
                     if (contiguousLength > 1)
                     {
-                        ulong blockEnd = _freeBlocks[i + contiguousLength - 1].End;
-                        _freeBlocks.RemoveRange(i, contiguousLength);
+                        ulong blockEnd = freeBlocks[i + contiguousLength - 1].End;
+                        freeBlocks.RemoveRange(i, contiguousLength);
+
                         VkMemoryBlock mergedBlock = new VkMemoryBlock(
                             Memory,
                             blockStart,
@@ -366,14 +418,17 @@ namespace Veldrid.Vk
                             _memoryTypeIndex,
                             _mappedPtr,
                             false);
-                        _freeBlocks.Insert(i, mergedBlock);
+                        freeBlocks.Insert(i, mergedBlock);
+                        hasMerged = true;
                         contiguousLength = 0;
                     }
                 }
+
+                return hasMerged;
             }
 
 #if DEBUG
-            private List<VkMemoryBlock> _allocatedBlocks = new List<VkMemoryBlock>();
+            private HashSet<VkMemoryBlock> _allocatedBlocks = new HashSet<VkMemoryBlock>();
 
             private void CheckAllocatedBlock(VkMemoryBlock block)
             {
@@ -382,7 +437,7 @@ namespace Veldrid.Vk
                     Debug.Assert(!BlocksOverlap(block, oldBlock), "Allocated blocks have overlapped.");
                 }
 
-                _allocatedBlocks.Add(block);
+                Debug.Assert(_allocatedBlocks.Add(block), "Same block added twice.");
             }
 
             private bool BlocksOverlap(VkMemoryBlock first, VkMemoryBlock second)
@@ -403,6 +458,17 @@ namespace Veldrid.Vk
                 Debug.Assert(_allocatedBlocks.Remove(block), "Unable to remove a supposedly allocated block.");
             }
 #endif
+
+            public bool IsFullFreeBlock()
+            {
+                if (_freeBlocks.Count == 1)
+                {
+                    VkMemoryBlock freeBlock = _freeBlocks[0];
+                    return freeBlock.Offset == 0
+                        && freeBlock.Size == _totalMemorySize;
+                }
+                return false;
+            }
 
             public void Dispose()
             {
