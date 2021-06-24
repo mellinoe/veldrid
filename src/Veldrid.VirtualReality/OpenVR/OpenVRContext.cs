@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Numerics;
 using System.Text;
+using System.Numerics;
 using Valve.VR;
 using Veldrid.Vk;
 using OVR = Valve.VR.OpenVR;

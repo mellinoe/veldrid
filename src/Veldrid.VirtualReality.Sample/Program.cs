@@ -27,6 +27,8 @@ namespace Veldrid.VirtualReality.Sample
                 if (!VRContext.IsOpenVRSupported())
                 {
                     Console.WriteLine("This sample requires an Oculus or OpenVR-capable headset.");
+                    Console.WriteLine("Press any key to exit...");
+                    Console.ReadKey();
                     return;
                 }
             }

@@ -75,7 +75,7 @@ namespace Veldrid.VirtualReality.Oculus
 
         private delegate ovrResult ovr_Initialize_t(ovrInitParams* @params);
         private static ovr_Initialize_t p_ovr_Initialize;
-        public static ovrResult ovr_Initialize(ovrInitParams* @params) => p_ovr_Initialize(@params);
+        public static ovrResult ovr_Initialize(ovrInitParams* @params) => p_ovr_Initialize == null ? ovrResult.Error_LibLoad : p_ovr_Initialize(@params);
 
         private delegate void ovr_Shutdown_t();
         private static ovr_Shutdown_t p_ovr_Shutdown;
