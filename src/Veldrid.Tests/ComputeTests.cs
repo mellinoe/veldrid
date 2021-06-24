@@ -2,23 +2,196 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Veldrid.SPIRV;
 using Xunit;
 
 namespace Veldrid.Tests
 {
     [StructLayout(LayoutKind.Sequential)]
-    public struct BasicComputeTestParams
+    struct FillValueStruct
     {
-        public uint Width;
-        public uint Height;
-        private uint _padding1;
-        private uint _padding2;
+        /// <summary>
+        /// The value we fill the 3d texture with.
+        /// </summary>
+        public float FillValue;
+        public float pad1, pad2, pad3;
+
+        public FillValueStruct(float fillValue)
+        {
+            FillValue = fillValue;
+            pad1 = pad2 = pad3 = 0;
+        }
     }
+
 
     public abstract class ComputeTests<T> : GraphicsDeviceTestBase<T> where T : GraphicsDeviceCreator
     {
+        [Fact]
+        public void ComputeShader3dTexture()
+        {
+            // Just a dumb compute shader that fills a 3D texture with the same value from a uniform multiplied by the depth.
+            string shaderText = @"
+#version 450
+layout(set = 0, binding = 0, rgba32f) uniform image3D TextureToFill;
+layout(set = 0, binding = 1) uniform FillValueBuffer
+{
+    float FillValue;
+    float Padding1;
+    float Padding2;
+    float Padding3;
+};
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+void main()
+{
+    ivec3 textureCoordinate = ivec3(gl_GlobalInvocationID.xyz);
+    float dataToStore = FillValue * (textureCoordinate.z + 1);
+
+    imageStore(TextureToFill, textureCoordinate, vec4(dataToStore));
+}
+";
+
+            const float FillValue = 42.42f;
+            const uint OutputTextureSize = 32;
+
+            using Shader computeShader = RF.CreateFromSpirv(new ShaderDescription(
+                ShaderStages.Compute,
+                Encoding.ASCII.GetBytes(shaderText),
+                "main"));
+
+            using ResourceLayout computeLayout = RF.CreateResourceLayout(new ResourceLayoutDescription(
+                new ResourceLayoutElementDescription("TextureToFill", ResourceKind.TextureReadWrite, ShaderStages.Compute),
+                new ResourceLayoutElementDescription("FillValueBuffer", ResourceKind.UniformBuffer, ShaderStages.Compute)));
+
+            using Pipeline computePipeline = RF.CreateComputePipeline(new ComputePipelineDescription(
+                computeShader,
+                computeLayout,
+                16, 16, 1));
+
+            using DeviceBuffer fillValueBuffer = RF.CreateBuffer(new BufferDescription((uint)Marshal.SizeOf<FillValueStruct>(), BufferUsage.UniformBuffer));
+
+            // Create our output texture.
+            using Texture computeTargetTexture = RF.CreateTexture(TextureDescription.Texture3D(
+                OutputTextureSize,
+                OutputTextureSize,
+                OutputTextureSize,
+                1,
+                PixelFormat.R32_G32_B32_A32_Float,
+                TextureUsage.Sampled | TextureUsage.Storage));
+
+            using TextureView computeTargetTextureView = RF.CreateTextureView(computeTargetTexture);
+
+            using ResourceSet computeResourceSet = RF.CreateResourceSet(new ResourceSetDescription(
+                computeLayout,
+                computeTargetTextureView,
+                fillValueBuffer));
+
+            using CommandList cl = RF.CreateCommandList();
+            cl.Begin();
+
+            cl.UpdateBuffer(fillValueBuffer, 0, new FillValueStruct(FillValue));
+
+            // Use the compute shader to fill the texture.
+            cl.SetPipeline(computePipeline);
+            cl.SetComputeResourceSet(0, computeResourceSet);
+            const uint GroupDivisorXY = 16;
+            cl.Dispatch(OutputTextureSize / GroupDivisorXY, OutputTextureSize / GroupDivisorXY, OutputTextureSize);
+
+            cl.End();
+            GD.SubmitCommands(cl);
+            GD.WaitForIdle();
+
+            // Read back from our texture and make sure it has been properly filled.
+            for (uint depth = 0; depth < computeTargetTexture.Depth; depth++)
+            {
+                RgbaFloat expectedFillValue = new RgbaFloat(new System.Numerics.Vector4(FillValue * (depth + 1)));
+                int notFilledCount = CountTexelsNotFilledAtDepth(GD, computeTargetTexture, expectedFillValue, depth);
+
+                if (notFilledCount == 0)
+                {
+                    // Expected behavior:
+                    Console.WriteLine($"All texels were properly set at depth {depth}");
+                }
+                else
+                {
+                    // Unexpected behavior:
+                    uint totalTexels = computeTargetTexture.Width * computeTargetTexture.Height;
+                    throw new Exception($"{notFilledCount} of {totalTexels} texels were not properly set at depth {depth}");
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Returns the number of texels in the texture that DO NOT match the fill value.
+        /// </summary>
+        private static int CountTexelsNotFilledAtDepth<TexelType>(GraphicsDevice device, Texture texture, TexelType fillValue, uint depth)
+            where TexelType : unmanaged
+        {
+            ResourceFactory factory = device.ResourceFactory;
+
+            // We need to create a staging texture and copy into it.
+            TextureDescription description = new TextureDescription(texture.Width, texture.Height, depth: 1,
+                texture.MipLevels, texture.ArrayLayers,
+                texture.Format, TextureUsage.Staging,
+                texture.Type, texture.SampleCount);
+
+            Texture staging = factory.CreateTexture(ref description);
+
+            using CommandList cl = factory.CreateCommandList();
+            cl.Begin();
+
+            cl.CopyTexture(texture,
+                srcX: 0, srcY: 0, srcZ: depth,
+                srcMipLevel: 0, srcBaseArrayLayer: 0,
+                staging,
+                dstX: 0, dstY: 0, dstZ: 0,
+                dstMipLevel: 0, dstBaseArrayLayer: 0,
+                staging.Width, staging.Height,
+                depth: 1, layerCount: 1);
+
+            cl.End();
+            device.SubmitCommands(cl);
+            device.WaitForIdle();
+
+            try
+            {
+                MappedResourceView<TexelType> mapped = device.Map<TexelType>(staging, MapMode.Read);
+
+                int notFilledCount = 0;
+                for (int y = 0; y < staging.Height; y++)
+                {
+                    for (int x = 0; x < staging.Width; x++)
+                    {
+                        TexelType actual = mapped[x, y];
+                        if (!fillValue.Equals(actual))
+                        {
+                            notFilledCount++;
+                        }
+                    }
+                }
+
+                return notFilledCount;
+            }
+            finally
+            {
+                device.Unmap(staging);
+            }
+        }
+
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BasicComputeTestParams
+        {
+            public uint Width;
+            public uint Height;
+            private uint _padding1;
+            private uint _padding2;
+        }
+
+
         [Fact]
         public void BasicCompute()
         {

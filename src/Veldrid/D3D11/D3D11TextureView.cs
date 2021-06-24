@@ -71,8 +71,10 @@ namespace Veldrid.D3D11
                 {
                     uavDesc.ViewDimension = UnorderedAccessViewDimension.Texture3D;
                     uavDesc.Texture3D.MipSlice = (int)description.BaseMipLevel;
-                    uavDesc.Texture3D.FirstWSlice = (int)description.BaseArrayLayer;
-                    uavDesc.Texture3D.WSize = (int)description.ArrayLayers;
+
+                    // Map the entire range of the 3D texture.
+                    uavDesc.Texture3D.FirstWSlice = 0;
+                    uavDesc.Texture3D.WSize = (int)d3dTex.Depth;
                 }
 
                 UnorderedAccessView = device.CreateUnorderedAccessView(d3dTex.DeviceTexture, uavDesc);
