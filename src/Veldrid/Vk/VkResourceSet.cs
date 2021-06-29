@@ -17,12 +17,12 @@ namespace Veldrid.Vk
         public VkDescriptorSet DescriptorSet => _descriptorAllocationToken.Set;
 
         private readonly List<VkTexture> _sampledTextures = new List<VkTexture>();
-        public IReadOnlyList<VkTexture> SampledTextures => _sampledTextures;
+        public List<VkTexture> SampledTextures => _sampledTextures;
         private readonly List<VkTexture> _storageImages = new List<VkTexture>();
-        public IReadOnlyList<VkTexture> StorageTextures => _storageImages;
+        public List<VkTexture> StorageTextures => _storageImages;
 
         public ResourceRefCount RefCount { get; }
-        public IReadOnlyList<ResourceRefCount> RefCounts => _refCounts;
+        public List<ResourceRefCount> RefCounts => _refCounts;
 
         public override bool IsDisposed => _destroyed;
 
