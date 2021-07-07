@@ -27,6 +27,18 @@ namespace Veldrid
         /// Controls whether the scissor test is enabled.
         /// </summary>
         public bool ScissorTestEnabled;
+        /// <summary>
+        /// Controls whether depth bias is enabled.
+        /// </summary>
+        public bool DepthBiasEnabled;
+        /// <summary>
+        /// Controls how much constant depth bias to apply.
+        /// </summary>
+        public int DepthBiasConstant;
+        /// <summary>
+        /// Controls how much slope-scaled depth bias to apply.
+        /// </summary>
+        public float DepthBiasSlopeScaled;
 
         /// <summary>
         /// Constructs a new RasterizerStateDescription.
@@ -36,18 +48,27 @@ namespace Veldrid
         /// <param name="frontFace">Controls the winding order used to determine the front face of primitives.</param>
         /// <param name="depthClipEnabled">Controls whether depth clipping is enabled.</param>
         /// <param name="scissorTestEnabled">Controls whether the scissor test is enabled.</param>
+        /// <param name="depthBiasEnabled">Controls whether depth bias is enabled.</param>
+        /// <param name="depthBiasConstant">Controls how much constant depth bias to apply.</param>
+        /// <param name="depthBiasSlope">Controls how much slope-scaled depth bias to apply.</param>
         public RasterizerStateDescription(
             FaceCullMode cullMode,
             PolygonFillMode fillMode,
             FrontFace frontFace,
             bool depthClipEnabled,
-            bool scissorTestEnabled)
+            bool scissorTestEnabled,
+            bool depthBiasEnabled = false,
+            int depthBiasConstant = 0,
+            float depthBiasSlope = 0)
         {
             CullMode = cullMode;
             FillMode = fillMode;
             FrontFace = frontFace;
             DepthClipEnabled = depthClipEnabled;
             ScissorTestEnabled = scissorTestEnabled;
+            DepthBiasEnabled = depthBiasEnabled;
+            DepthBiasSlopeScaled = depthBiasSlope;
+            DepthBiasConstant = depthBiasConstant;
         }
 
         /// <summary>
@@ -59,6 +80,9 @@ namespace Veldrid
         ///     FrontFace = FrontFace.Clockwise
         ///     DepthClipEnabled = true
         ///     ScissorTestEnabled = false
+        ///     DepthBiasEnabled = false
+        ///     DepthBiasSlopeScaled = 0
+        ///     DepthBiasConstant = 0
         /// </summary>
         public static readonly RasterizerStateDescription Default = new RasterizerStateDescription
         {
@@ -67,6 +91,9 @@ namespace Veldrid
             FrontFace = FrontFace.Clockwise,
             DepthClipEnabled = true,
             ScissorTestEnabled = false,
+            DepthBiasEnabled = false,
+            DepthBiasSlopeScaled = 0,
+            DepthBiasConstant = 0,
         };
 
         /// <summary>
@@ -78,6 +105,9 @@ namespace Veldrid
         ///     FrontFace = FrontFace.Clockwise
         ///     DepthClipEnabled = true
         ///     ScissorTestEnabled = false
+        ///     DepthBiasEnabled = false
+        ///     DepthBiasSlopeScaled = 0
+        ///     DepthBiasConstant = 0
         /// </summary>
         public static readonly RasterizerStateDescription CullNone = new RasterizerStateDescription
         {
@@ -86,6 +116,9 @@ namespace Veldrid
             FrontFace = FrontFace.Clockwise,
             DepthClipEnabled = true,
             ScissorTestEnabled = false,
+            DepthBiasEnabled = false,
+            DepthBiasSlopeScaled = 0,
+            DepthBiasConstant = 0,
         };
 
         /// <summary>
@@ -99,7 +132,10 @@ namespace Veldrid
                 && FillMode == other.FillMode
                 && FrontFace == other.FrontFace
                 && DepthClipEnabled.Equals(other.DepthClipEnabled)
-                && ScissorTestEnabled.Equals(other.ScissorTestEnabled);
+                && ScissorTestEnabled.Equals(other.ScissorTestEnabled)
+                && DepthBiasEnabled == other.DepthBiasEnabled
+                && DepthBiasSlopeScaled == other.DepthBiasSlopeScaled
+                && DepthBiasConstant == other.DepthBiasConstant;
         }
 
         /// <summary>
@@ -113,7 +149,10 @@ namespace Veldrid
                 (int)FillMode,
                 (int)FrontFace,
                 DepthClipEnabled.GetHashCode(),
-                ScissorTestEnabled.GetHashCode());
+                ScissorTestEnabled.GetHashCode(),
+                DepthBiasEnabled.GetHashCode(),
+                DepthBiasSlopeScaled.GetHashCode(),
+                DepthBiasConstant.GetHashCode());
         }
     }
 }

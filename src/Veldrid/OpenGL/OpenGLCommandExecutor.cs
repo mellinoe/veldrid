@@ -674,6 +674,35 @@ namespace Veldrid.OpenGL
             glFrontFace(OpenGLFormats.VdToGLFrontFaceDirection(rs.FrontFace));
             CheckLastError();
 
+            if (rs.DepthBiasEnabled)
+            {
+                glEnable(EnableCap.PolygonOffsetFill);
+                CheckLastError();
+
+                glEnable(EnableCap.PolygonOffsetLine);
+                CheckLastError();
+
+                glEnable(EnableCap.PolygonOffsetPoint);
+                CheckLastError();
+
+                glPolygonOffset(rs.DepthBiasSlopeScaled, rs.DepthBiasConstant);
+                CheckLastError();
+            }
+            else
+            {
+                glDisable(EnableCap.PolygonOffsetFill);
+                CheckLastError();
+
+                glDisable(EnableCap.PolygonOffsetLine);
+                CheckLastError();
+
+                glDisable(EnableCap.PolygonOffsetPoint);
+                CheckLastError();
+
+                glPolygonOffset(0, 0);
+                CheckLastError();
+            }
+
             // Primitive Topology
             _primitiveType = OpenGLFormats.VdToGLPrimitiveType(_graphicsPipeline.PrimitiveTopology);
 

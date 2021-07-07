@@ -150,7 +150,10 @@ namespace Veldrid.D3D11
                 DepthClipEnable = key.VeldridDescription.DepthClipEnabled,
                 ScissorEnable = key.VeldridDescription.ScissorTestEnabled,
                 FrontCounterClockwise = key.VeldridDescription.FrontFace == FrontFace.CounterClockwise,
-                MultisampleEnable = key.Multisampled
+                MultisampleEnable = key.Multisampled,
+                DepthBias = key.VeldridDescription.DepthBiasEnabled ? key.VeldridDescription.DepthBiasConstant : 0,
+                SlopeScaledDepthBias = key.VeldridDescription.DepthBiasEnabled ? key.VeldridDescription.DepthBiasSlopeScaled : 0,
+                DepthBiasClamp = 0,
             };
 
             return _device.CreateRasterizerState(rssDesc);

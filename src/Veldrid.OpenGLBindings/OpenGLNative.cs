@@ -523,6 +523,11 @@ namespace Veldrid.OpenGLBinding
         public static void glPolygonMode(MaterialFace face, PolygonMode mode) => p_glPolygonMode(face, mode);
 
         [UnmanagedFunctionPointer(CallConv)]
+        private delegate void glPolygonOffset_t(float factor, float units);
+        private static glPolygonOffset_t p_glPolygonOffset;
+        public static void glPolygonOffset(float factor, float units) => p_glPolygonOffset(factor, units);
+
+        [UnmanagedFunctionPointer(CallConv)]
         private delegate uint glCreateProgram_t();
         private static glCreateProgram_t p_glCreateProgram;
         public static uint glCreateProgram() => p_glCreateProgram();
@@ -1857,6 +1862,7 @@ namespace Veldrid.OpenGLBinding
             LoadFunction("glDebugMessageInsert", out p_glDebugMessageInsert);
 
             LoadFunction("glReadPixels", out p_glReadPixels);
+            LoadFunction("glPolygonOffset", out p_glPolygonOffset);
 
             if (!gles)
             {

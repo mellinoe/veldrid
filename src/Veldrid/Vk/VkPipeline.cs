@@ -77,6 +77,9 @@ namespace Veldrid.Vk
             rsCI.depthClampEnable = !rsDesc.DepthClipEnabled;
             rsCI.frontFace = rsDesc.FrontFace == FrontFace.Clockwise ? VkFrontFace.Clockwise : VkFrontFace.CounterClockwise;
             rsCI.lineWidth = 1f;
+            rsCI.depthBiasEnable = rsDesc.DepthBiasEnabled;
+            rsCI.depthBiasSlopeFactor = rsDesc.DepthBiasEnabled ? rsDesc.DepthBiasSlopeScaled : 0;
+            rsCI.depthBiasConstantFactor = rsDesc.DepthBiasEnabled ? rsDesc.DepthBiasConstant : 0;
 
             pipelineCI.pRasterizationState = &rsCI;
 
