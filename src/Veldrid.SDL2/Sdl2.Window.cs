@@ -11,9 +11,21 @@ namespace Veldrid.Sdl2
         public const int SDL_WINDOWPOS_CENTERED = 0x2FFF0000;
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate SDL_Window SDL_CreateWindow_t(string title, int x, int y, int w, int h, SDL_WindowFlags flags);
+        private delegate SDL_Window SDL_CreateWindow_t(byte* title, int x, int y, int w, int h, SDL_WindowFlags flags);
         private static SDL_CreateWindow_t s_sdl_createWindow = LoadFunction<SDL_CreateWindow_t>("SDL_CreateWindow");
-        public static SDL_Window SDL_CreateWindow(string title, int x, int y, int w, int h, SDL_WindowFlags flags) => s_sdl_createWindow(title, x, y, w, h, flags);
+        public static SDL_Window SDL_CreateWindow(string title, int x, int y, int w, int h, SDL_WindowFlags flags) => s_sdl_createWindow(Utf8EncodeNullable(title), x, y, w, h, flags);
+
+        internal static unsafe byte* Utf8EncodeNullable(string str)
+        {
+            if (string.IsNullOrEmpty(str))
+                return (byte*)0;
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(str);
+            var mem = System.Runtime.InteropServices.Marshal.AllocHGlobal(bytes.Length + 1);
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, mem, bytes.Length);
+            ((byte*)mem)[bytes.Length] = 0;
+            return (byte*)mem;
+        }
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate SDL_Window SDL_CreateWindowFrom_t(IntPtr data);
