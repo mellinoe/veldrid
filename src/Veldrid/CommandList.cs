@@ -818,7 +818,7 @@ namespace Veldrid
         /// <param name="bufferOffsetInBytes">An offset, in bytes, from the beginning of the <see cref="DeviceBuffer"/>'s storage, at
         /// which new data will be uploaded.</param>
         /// <param name="source">An array containing the data to upload.</param>
-        public unsafe void UpdateBuffer<T>(
+        public void UpdateBuffer<T>(
             DeviceBuffer buffer,
             uint bufferOffsetInBytes,
             T[] source) where T : unmanaged
@@ -844,6 +844,23 @@ namespace Veldrid
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)pin, (uint)(sizeof(T) * source.Length));
             }
+        }
+
+        /// <summary>
+        /// Updates a <see cref="DeviceBuffer"/> region with new data.
+        /// This function must be used with a blittable value type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of data to upload.</typeparam>
+        /// <param name="buffer">The resource to update.</param>
+        /// <param name="bufferOffsetInBytes">An offset, in bytes, from the beginning of the <see cref="DeviceBuffer"/>'s storage, at
+        /// which new data will be uploaded.</param>
+        /// <param name="source">An span containing the data to upload.</param>
+        public void UpdateBuffer<T>(
+            DeviceBuffer buffer,
+            uint bufferOffsetInBytes,
+            Span<T> source) where T : unmanaged
+        {
+            UpdateBuffer(buffer, bufferOffsetInBytes, (ReadOnlySpan<T>)source);
         }
 
         /// <summary>

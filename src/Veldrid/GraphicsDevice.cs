@@ -473,6 +473,32 @@ namespace Veldrid
             }
         }
 
+        /// <summary>
+        /// Updates a portion of a <see cref="Texture"/> resource with new data contained in an array
+        /// </summary>
+        /// <param name="texture">The resource to update.</param>
+        /// <param name="source">A readonly span containing the data to upload. This must contain tightly-packed pixel data for the
+        /// region specified.</param>
+        /// <param name="x">The minimum X value of the updated region.</param>
+        /// <param name="y">The minimum Y value of the updated region.</param>
+        /// <param name="z">The minimum Z value of the updated region.</param>
+        /// <param name="width">The width of the updated region, in texels.</param>
+        /// <param name="height">The height of the updated region, in texels.</param>
+        /// <param name="depth">The depth of the updated region, in texels.</param>
+        /// <param name="mipLevel">The mipmap level to update. Must be less than the total number of mipmaps contained in the
+        /// <see cref="Texture"/>.</param>
+        /// <param name="arrayLayer">The array layer to update. Must be less than the total array layer count contained in the
+        /// <see cref="Texture"/>.</param>
+        public void UpdateTexture<T>(
+            Texture texture,
+            Span<T> source,
+            uint x, uint y, uint z,
+            uint width, uint height, uint depth,
+            uint mipLevel, uint arrayLayer) where T : unmanaged
+        {
+            UpdateTexture(texture, (ReadOnlySpan<T>)source, x, y, z, width, height, depth, mipLevel, arrayLayer);
+        }
+
         private protected abstract void UpdateTextureCore(
             Texture texture,
             IntPtr source,
@@ -618,7 +644,7 @@ namespace Veldrid
         /// <param name="bufferOffsetInBytes">An offset, in bytes, from the beginning of the <see cref="DeviceBuffer"/>'s storage, at
         /// which new data will be uploaded.</param>
         /// <param name="source">An array containing the data to upload.</param>
-        public unsafe void UpdateBuffer<T>(
+        public void UpdateBuffer<T>(
             DeviceBuffer buffer,
             uint bufferOffsetInBytes,
             T[] source) where T : unmanaged
@@ -644,6 +670,23 @@ namespace Veldrid
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)pin, (uint)(sizeof(T) * source.Length));
             }
+        }
+
+        /// <summary>
+        /// Updates a <see cref="DeviceBuffer"/> region with new data.
+        /// This function must be used with a blittable value type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of data to upload.</typeparam>
+        /// <param name="buffer">The resource to update.</param>
+        /// <param name="bufferOffsetInBytes">An offset, in bytes, from the beginning of the <see cref="DeviceBuffer"/>'s storage, at
+        /// which new data will be uploaded.</param>
+        /// <param name="source">A span containing the data to upload.</param>
+        public void UpdateBuffer<T>(
+            DeviceBuffer buffer,
+            uint bufferOffsetInBytes,
+            Span<T> source) where T : unmanaged
+        {
+            UpdateBuffer(buffer, bufferOffsetInBytes, (ReadOnlySpan<T>)source);
         }
 
         /// <summary>
