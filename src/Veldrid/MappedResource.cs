@@ -78,8 +78,6 @@ namespace Veldrid
     /// <typeparam name="T">The blittable value type which mapped data is viewed as.</typeparam>
     public unsafe struct MappedResourceView<T> where T : struct
     {
-        private static readonly int s_sizeofT = Unsafe.SizeOf<T>();
-
         /// <summary>
         /// The <see cref="MappedResource"/> that this instance views.
         /// </summary>
@@ -102,7 +100,7 @@ namespace Veldrid
         {
             MappedResource = rawResource;
             SizeInBytes = rawResource.SizeInBytes;
-            Count = (int)(SizeInBytes / s_sizeofT);
+            Count = (int)(SizeInBytes / Unsafe.SizeOf<T>());
         }
 
         /// <summary>
@@ -120,7 +118,7 @@ namespace Veldrid
                         $"Given index ({index}) must be non-negative and less than Count ({Count}).");
                 }
 
-                byte* ptr = (byte*)MappedResource.Data + (index * s_sizeofT);
+                byte* ptr = (byte*)MappedResource.Data + (index * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }
@@ -140,7 +138,7 @@ namespace Veldrid
                         $"Given index ({index}) must be less than Count ({Count}).");
                 }
 
-                byte* ptr = (byte*)MappedResource.Data + (index * s_sizeofT);
+                byte* ptr = (byte*)MappedResource.Data + (index * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }
@@ -155,7 +153,7 @@ namespace Veldrid
         {
             get
             {
-                byte* ptr = (byte*)MappedResource.Data + (y * MappedResource.RowPitch) + (x * s_sizeofT);
+                byte* ptr = (byte*)MappedResource.Data + (y * MappedResource.RowPitch) + (x * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }
@@ -170,7 +168,7 @@ namespace Veldrid
         {
             get
             {
-                byte* ptr = (byte*)MappedResource.Data + (y * MappedResource.RowPitch) + (x * s_sizeofT);
+                byte* ptr = (byte*)MappedResource.Data + (y * MappedResource.RowPitch) + (x * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }
@@ -189,7 +187,7 @@ namespace Veldrid
                 byte* ptr = (byte*)MappedResource.Data
                     + (z * MappedResource.DepthPitch)
                     + (y * MappedResource.RowPitch)
-                    + (x * s_sizeofT);
+                    + (x * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }
@@ -208,7 +206,7 @@ namespace Veldrid
                 byte* ptr = (byte*)MappedResource.Data
                     + (z * MappedResource.DepthPitch)
                     + (y * MappedResource.RowPitch)
-                    + (x * s_sizeofT);
+                    + (x * Unsafe.SizeOf<T>());
                 return ref Unsafe.AsRef<T>(ptr);
             }
         }

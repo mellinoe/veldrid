@@ -41,11 +41,6 @@ namespace Veldrid
             }
         }
 
-        internal static uint USizeOf<T>() where T : struct
-        {
-            return (uint)Unsafe.SizeOf<T>();
-        }
-
         internal static unsafe string GetString(byte* stringStart)
         {
             int characters = 0;

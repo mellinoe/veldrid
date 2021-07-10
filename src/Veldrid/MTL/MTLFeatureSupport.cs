@@ -1,16 +1,19 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Veldrid.MetalBindings;
 
 namespace Veldrid.MTL
 {
-    internal class MTLFeatureSupport
+    internal class MTLFeatureSupport : IReadOnlyCollection<MTLFeatureSet>
     {
         private readonly HashSet<MTLFeatureSet> _supportedFeatureSets = new HashSet<MTLFeatureSet>();
 
         public bool IsMacOS { get; }
 
         public MTLFeatureSet MaxFeatureSet { get; }
+
+        public int Count => _supportedFeatureSets.Count;
 
         public MTLFeatureSupport(MTLDevice device)
         {
@@ -30,7 +33,7 @@ namespace Veldrid.MTL
 
         public bool IsSupported(MTLFeatureSet featureSet) => _supportedFeatureSets.Contains(featureSet);
 
-        internal bool IsDrawBaseVertexInstanceSupported()
+        public bool IsDrawBaseVertexInstanceSupported()
         {
             return IsSupported(MTLFeatureSet.iOS_GPUFamily3_v1)
                 || IsSupported(MTLFeatureSet.iOS_GPUFamily3_v2)
@@ -38,6 +41,16 @@ namespace Veldrid.MTL
                 || IsSupported(MTLFeatureSet.iOS_GPUFamily4_v1)
                 || IsSupported(MTLFeatureSet.tvOS_GPUFamily2_v1)
                 || IsMacOS;
+        }
+
+        public IEnumerator<MTLFeatureSet> GetEnumerator()
+        {
+            return _supportedFeatureSets.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
         }
     }
 }

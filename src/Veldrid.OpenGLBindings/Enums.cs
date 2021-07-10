@@ -1730,12 +1730,12 @@ namespace Veldrid.OpenGLBinding
         Vendor = 0x1F00,
         Renderer = 0x1F01,
         Version = 0x1F02,
+        ShadingLanguageVersion = 35724,
     }
 
     public enum StringNameIndexed
     {
-        Extensions = 7939,
-        ShadingLanguageVersion = 35724
+        Extensions = 7939
     }
 
     public enum ObjectLabelIdentifier

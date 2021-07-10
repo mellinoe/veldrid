@@ -175,7 +175,9 @@ namespace Veldrid
         /// <param name="slot">The resource slot.</param>
         /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
         public unsafe void SetGraphicsResourceSet(uint slot, ResourceSet rs)
-            => SetGraphicsResourceSet(slot, rs, 0, ref Unsafe.AsRef<uint>(null));
+        {
+            SetGraphicsResourceSet(slot, rs, ReadOnlySpan<uint>.Empty);
+        }
 
         /// <summary>
         /// Sets the active <see cref="ResourceSet"/> for the given index. This ResourceSet is only active for the graphics
@@ -183,31 +185,14 @@ namespace Veldrid
         /// </summary>
         /// <param name="slot">The resource slot.</param>
         /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsets">An array containing the offsets to apply to the dynamic
-        /// buffers contained in the <see cref="ResourceSet"/>. The number of elements in this array must be equal to the number
-        /// of dynamic buffers (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the
-        /// <see cref="ResourceSet"/>. These offsets are applied in the order that dynamic buffer
+        /// <param name="dynamicOffsets">A span of offsets which will be applied to the dynamic
+        /// buffers contained in the <see cref="ResourceSet"/>. The length must be equal to the number of
+        /// dynamic buffers (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the <see cref="ResourceSet"/>.
+        /// These offsets are applied in the order that dynamic buffer
         /// elements appear in the <see cref="ResourceSet"/>. Each of these offsets must be a multiple of either
         /// <see cref="GraphicsDevice.UniformBufferMinOffsetAlignment"/> or
         /// <see cref="GraphicsDevice.StructuredBufferMinOffsetAlignment"/>, depending on the kind of resource.</param>
-        public void SetGraphicsResourceSet(uint slot, ResourceSet rs, uint[] dynamicOffsets)
-            => SetGraphicsResourceSet(slot, rs, (uint)dynamicOffsets.Length, ref dynamicOffsets[0]);
-
-        /// <summary>
-        /// Sets the active <see cref="ResourceSet"/> for the given index. This ResourceSet is only active for the graphics
-        /// Pipeline.
-        /// </summary>
-        /// <param name="slot">The resource slot.</param>
-        /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsetsCount">The number of dynamic offsets being used. This must be equal to the number of
-        /// dynamic buffers (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the
-        /// <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsets">A reference to the first of a series of offsets which will be applied to the dynamic
-        /// buffers contained in the <see cref="ResourceSet"/>. These offsets are applied in the order that dynamic buffer
-        /// elements appear in the <see cref="ResourceSet"/>. Each of these offsets must be a multiple of either
-        /// <see cref="GraphicsDevice.UniformBufferMinOffsetAlignment"/> or
-        /// <see cref="GraphicsDevice.StructuredBufferMinOffsetAlignment"/>, depending on the kind of resource.</param>
-        public void SetGraphicsResourceSet(uint slot, ResourceSet rs, uint dynamicOffsetsCount, ref uint dynamicOffsets)
+        public void SetGraphicsResourceSet(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets)
         {
 #if VALIDATE_USAGE
             if (_graphicsPipeline == null)
@@ -242,15 +227,15 @@ namespace Veldrid
                 }
             }
 
-            if (rs.Layout.DynamicBufferCount != dynamicOffsetsCount)
+            if (rs.Layout.DynamicBufferCount != dynamicOffsets.Length)
             {
                 throw new VeldridException(
                     $"A dynamic offset must be provided for each resource that specifies " +
                     $"{nameof(ResourceLayoutElementOptions)}.{nameof(ResourceLayoutElementOptions.DynamicBinding)}. " +
-                    $"{rs.Layout.DynamicBufferCount} offsets were expected, but only {dynamicOffsetsCount} were provided.");
+                    $"{rs.Layout.DynamicBufferCount} offsets were expected, but only {dynamicOffsets.Length} were provided.");
             }
 
-            uint dynamicOffsetIndex = 0;
+            int dynamicOffsetIndex = 0;
             for (uint i = 0; i < layoutDesc.Elements.Length; i++)
             {
                 if ((layoutDesc.Elements[i].Options & ResourceLayoutElementOptions.DynamicBinding) != 0)
@@ -258,7 +243,7 @@ namespace Veldrid
                     uint requiredAlignment = layoutDesc.Elements[i].Kind == ResourceKind.UniformBuffer
                         ? _uniformBufferAlignment
                         : _structuredBufferAlignment;
-                    uint desiredOffset = Unsafe.Add(ref dynamicOffsets, (int)dynamicOffsetIndex);
+                    uint desiredOffset = dynamicOffsets[dynamicOffsetIndex];
                     dynamicOffsetIndex += 1;
                     DeviceBufferRange range = Util.GetBufferRange(rs.Resources[i], desiredOffset);
 
@@ -273,17 +258,11 @@ namespace Veldrid
             }
 
 #endif
-            SetGraphicsResourceSetCore(slot, rs, dynamicOffsetsCount, ref dynamicOffsets);
+            SetGraphicsResourceSetCore(slot, rs, dynamicOffsets);
         }
 
         // TODO: private protected
-        /// <summary>
-        /// </summary>
-        /// <param name="slot"></param>
-        /// <param name="rs"></param>
-        /// <param name="dynamicOffsets"></param>
-        /// <param name="dynamicOffsetsCount"></param>
-        protected abstract void SetGraphicsResourceSetCore(uint slot, ResourceSet rs, uint dynamicOffsetsCount, ref uint dynamicOffsets);
+        protected abstract void SetGraphicsResourceSetCore(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets);
 
         /// <summary>
         /// Sets the active <see cref="ResourceSet"/> for the given index. This ResourceSet is only active for the compute
@@ -291,8 +270,10 @@ namespace Veldrid
         /// </summary>
         /// <param name="slot">The resource slot.</param>
         /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
-        public unsafe void SetComputeResourceSet(uint slot, ResourceSet rs)
-            => SetComputeResourceSet(slot, rs, 0, ref Unsafe.AsRef<uint>(null));
+        public void SetComputeResourceSet(uint slot, ResourceSet rs)
+        {
+            SetComputeResourceSet(slot, rs, ReadOnlySpan<uint>.Empty);
+        }
 
         /// <summary>
         /// Sets the active <see cref="ResourceSet"/> for the given index. This ResourceSet is only active for the compute
@@ -300,28 +281,14 @@ namespace Veldrid
         /// </summary>
         /// <param name="slot">The resource slot.</param>
         /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsets">An array containing the offsets to apply to the dynamic buffers contained in the
-        /// <see cref="ResourceSet"/>. The number of elements in this array must be equal to the number of dynamic buffers
-        /// (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the <see cref="ResourceSet"/>. These offsets
-        /// are applied in the order that dynamic buffer elements appear in the <see cref="ResourceSet"/>.</param>
-        public void SetComputeResourceSet(uint slot, ResourceSet rs, uint[] dynamicOffsets)
-            => SetComputeResourceSet(slot, rs, (uint)dynamicOffsets.Length, ref dynamicOffsets[0]);
-
-        /// <summary>
-        /// Sets the active <see cref="ResourceSet"/> for the given index. This ResourceSet is only active for the compute
-        /// <see cref="Pipeline"/>.
-        /// </summary>
-        /// <param name="slot">The resource slot.</param>
-        /// <param name="rs">The new <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsetsCount">The number of dynamic offsets being used. This must be equal to the number of
-        /// dynamic buffers (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the
-        /// <see cref="ResourceSet"/>.</param>
-        /// <param name="dynamicOffsets">A reference to the first of a series of offsets which will be applied to the dynamic
-        /// buffers contained in the <see cref="ResourceSet"/>. These offsets are applied in the order that dynamic buffer
+        /// <param name="dynamicOffsets">A span of offsets which will be applied to the dynamic
+        /// buffers contained in the <see cref="ResourceSet"/>. The length must be equal to the number of
+        /// dynamic buffers (<see cref="ResourceLayoutElementOptions.DynamicBinding"/>) contained in the <see cref="ResourceSet"/>.
+        /// These offsets are applied in the order that dynamic buffer
         /// elements appear in the <see cref="ResourceSet"/>. Each of these offsets must be a multiple of either
         /// <see cref="GraphicsDevice.UniformBufferMinOffsetAlignment"/> or
         /// <see cref="GraphicsDevice.StructuredBufferMinOffsetAlignment"/>, depending on the kind of resource.</param>
-        public unsafe void SetComputeResourceSet(uint slot, ResourceSet rs, uint dynamicOffsetsCount, ref uint dynamicOffsets)
+        public void SetComputeResourceSet(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets)
         {
 #if VALIDATE_USAGE
             if (_computePipeline == null)
@@ -355,17 +322,12 @@ namespace Veldrid
                 }
             }
 #endif
-            SetComputeResourceSetCore(slot, rs, dynamicOffsetsCount, ref dynamicOffsets);
+            SetComputeResourceSetCore(slot, rs, dynamicOffsets);
         }
 
         // TODO: private protected
-        /// <summary>
-        /// </summary>
-        /// <param name="slot"></param>
-        /// <param name="set"></param>
-        /// <param name="dynamicOffsetsCount"></param>
-        /// <param name="dynamicOffsets"></param>
-        protected abstract void SetComputeResourceSetCore(uint slot, ResourceSet set, uint dynamicOffsetsCount, ref uint dynamicOffsets);
+
+        protected abstract void SetComputeResourceSetCore(uint slot, ResourceSet set, ReadOnlySpan<uint> dynamicOffsets);
 
         /// <summary>
         /// Sets the active <see cref="Framebuffer"/> which will be rendered to.
@@ -758,11 +720,7 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             T source) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
-            {
-                UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, (uint)sizeof(T));
-            }
+            UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)(&source), (uint)sizeof(T));
         }
 
         /// <summary>
@@ -779,10 +737,9 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             ref T source) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
+            fixed (T* ptr = &source)
             {
-                UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, Util.USizeOf<T>());
+                UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, (uint)Unsafe.SizeOf<T>());
             }
         }
 
@@ -802,8 +759,7 @@ namespace Veldrid
             ref T source,
             uint sizeInBytes) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
+            fixed (T* ptr = &source)
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, sizeInBytes);
             }
@@ -840,7 +796,7 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             ReadOnlySpan<T> source) where T : unmanaged
         {
-            fixed (void* pin = &MemoryMarshal.GetReference(source))
+            fixed (T* pin = source)
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)pin, (uint)(sizeof(T) * source.Length));
             }

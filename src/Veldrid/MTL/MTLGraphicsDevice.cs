@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using NativeLibraryLoader;
 using Veldrid.MetalBindings;
+using NativeLibrary = NativeLibraryLoader.NativeLibrary;
 
 namespace Veldrid.MTL
 {
@@ -18,9 +19,11 @@ namespace Veldrid.MTL
 
         private readonly MTLDevice _device;
         private readonly string _deviceName;
+        private readonly GraphicsApiVersion _apiVersion;
         private readonly MTLCommandQueue _commandQueue;
         private readonly MTLSwapchain _mainSwapchain;
         private readonly bool[] _supportedSampleCounts;
+        private BackendInfoMetal _metalInfo;
 
         private readonly object _submittedCommandsLock = new object();
         private readonly Dictionary<MTLCommandBuffer, MTLFence> _submittedCBs = new Dictionary<MTLCommandBuffer, MTLFence>();
@@ -53,14 +56,19 @@ namespace Veldrid.MTL
             _device = MTLDevice.MTLCreateSystemDefaultDevice();
             _deviceName = _device.name;
             MetalFeatures = new MTLFeatureSupport(_device);
+
+            int major = (int)MetalFeatures.MaxFeatureSet / 10000;
+            int minor = (int)MetalFeatures.MaxFeatureSet % 10000;
+            _apiVersion = new GraphicsApiVersion(major, minor, 0, 0);
+
             Features = new GraphicsDeviceFeatures(
                 computeShader: true,
                 geometryShader: false,
                 tessellationShaders: false,
                 multipleViewports: MetalFeatures.IsSupported(MTLFeatureSet.macOS_GPUFamily1_v3),
                 samplerLodBias: false,
-                drawBaseVertex: true,
-                drawBaseInstance: true,
+                drawBaseVertex: true,   // TODO?: MetalFeatures.IsDrawBaseVertexInstanceSupported()
+                drawBaseInstance: true, // TODO?: MetalFeatures.IsDrawBaseVertexInstanceSupported()
                 drawIndirect: true,
                 drawIndirectBaseInstance: true,
                 fillModeWireframe: true,
@@ -127,10 +135,16 @@ namespace Veldrid.MTL
                 _mainSwapchain = new MTLSwapchain(this, ref desc);
             }
 
+            _metalInfo = new BackendInfoMetal(this);
+
             PostDeviceCreated();
         }
 
         public override string DeviceName => _deviceName;
+
+        public override string VendorName => "Apple";
+
+        public override GraphicsApiVersion ApiVersion => _apiVersion;
 
         public override GraphicsBackend BackendType => GraphicsBackend.Metal;
 
@@ -429,6 +443,12 @@ namespace Veldrid.MTL
             _libSystem.Dispose();
             Marshal.FreeHGlobal(_completionBlockDescriptor);
             Marshal.FreeHGlobal(_completionBlockLiteral);
+        }
+
+        public override bool GetMetalInfo(out BackendInfoMetal info)
+        {
+            info = _metalInfo;
+            return true;
         }
 
         protected override void UnmapCore(MappableResource resource, uint subresource)

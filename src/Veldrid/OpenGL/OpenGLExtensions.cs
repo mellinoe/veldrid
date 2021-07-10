@@ -1,16 +1,17 @@
-﻿using System;
 using System.Collections.Generic;
 
 namespace Veldrid.OpenGL
 {
-    internal class OpenGLExtensions
+    internal class OpenGLExtensions : IReadOnlyCollection<string>
     {
         private readonly HashSet<string> _extensions;
         private readonly GraphicsBackend _backend;
         private readonly int _major;
         private readonly int _minor;
 
-        public OpenGLExtensions(HashSet<string> extensions, GraphicsBackend backend, int major, int minor)
+        public int Count => _extensions.Count;
+
+        internal OpenGLExtensions(HashSet<string> extensions, GraphicsBackend backend, int major, int minor)
         {
             _extensions = extensions;
             _backend = backend;
@@ -21,7 +22,7 @@ namespace Veldrid.OpenGL
                 || GLESVersion(3, 0);
             TextureStorageMultisample = IsExtensionSupported("GL_ARB_texture_storage_multisample")
                 || GLESVersion(3, 1);
-            ARB_DirectStateAccess = IsExtensionSupported("GL_ARB_direct_state_access");
+            ARB_DirectStateAccess = GLVersion(4, 5) || IsExtensionSupported("GL_ARB_direct_state_access");
             ARB_MultiBind = IsExtensionSupported("GL_ARB_multi_bind");
             ARB_TextureView = GLVersion(4, 3) || IsExtensionSupported("GL_ARB_texture_view"); // OpenGL 4.3
             CopyImage = IsExtensionSupported("GL_ARB_copy_image")
@@ -42,7 +43,7 @@ namespace Veldrid.OpenGL
                 || IsExtensionSupported("GL_ARB_draw_elements_base_vertex")
                 || GLESVersion(3, 2)
                 || IsExtensionSupported("GL_OES_draw_elements_base_vertex");
-            IndependentBlend = GLVersion(4, 0) || GLESVersion(3, 2);
+            IndependentBlend = GLVersion(4, 0) || IsExtensionSupported("GL_ARB_draw_buffers_blend") || GLESVersion(3, 2);
 
             DrawIndirect = GLVersion(4, 0) || IsExtensionSupported("GL_ARB_draw_indirect")
                 || GLESVersion(3, 1);
@@ -132,6 +133,16 @@ namespace Veldrid.OpenGL
             }
 
             return false;
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            return _extensions.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
         }
     }
 }

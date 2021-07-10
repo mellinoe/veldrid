@@ -5,8 +5,9 @@ using Veldrid.D3D11;
 namespace Veldrid
 {
     /// <summary>
-    /// Exposes Direct3D 11-specific functionality, useful for interoperating with native components which interface directly with
-    /// Direct3D 11. Can only be used on a GraphicsDevice whose GraphicsBackend is D3D11.
+    /// Exposes Direct3D 11-specific functionality,
+    /// useful for interoperating with native components which interface directly with Direct3D 11.
+    /// Can only be used on <see cref="GraphicsBackend.Direct3D11"/>.
     /// </summary>
     public class BackendInfoD3D11
     {
@@ -26,6 +27,11 @@ namespace Veldrid
         /// Gets a pointer to the IAdapter used to create the GraphicsDevice.
         /// </summary>
         public IntPtr Adapter => _gd.Adapter.NativePointer;
+
+        /// <summary>
+        /// Gets the PCI ID of the hardware device.
+        /// </summary>
+        public int DeviceId => _gd.DeviceId;
 
         /// <summary>
         /// Gets a pointer to the native texture wrapped by the given Veldrid Texture. Depending on the instance's TextureType,

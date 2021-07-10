@@ -11,6 +11,8 @@ using Veldrid.OpenGL.EAGL;
 using static Veldrid.OpenGL.EGL.EGLNative;
 using NativeLibraryLoader;
 using System.Runtime.CompilerServices;
+using NativeLibrary = NativeLibraryLoader.NativeLibrary;
+using Veldrid.OpenGL.EntryList;
 
 namespace Veldrid.OpenGL
 {
@@ -18,6 +20,10 @@ namespace Veldrid.OpenGL
     {
         private ResourceFactory _resourceFactory;
         private string _deviceName;
+        private string _vendorName;
+        private string _version;
+        private string _shadingLanguageVersion;
+        private GraphicsApiVersion _apiVersion;
         private GraphicsBackend _backendType;
         private GraphicsDeviceFeatures _features;
         private uint _vao;
@@ -62,10 +68,11 @@ namespace Veldrid.OpenGL
 
         private bool _syncToVBlank;
 
-        public int MajorVersion { get; private set; }
-        public int MinorVersion { get; private set; }
-
         public override string DeviceName => _deviceName;
+
+        public override string VendorName => _vendorName;
+
+        public override GraphicsApiVersion ApiVersion => _apiVersion;
 
         public override GraphicsBackend BackendType => _backendType;
 
@@ -93,6 +100,10 @@ namespace Veldrid.OpenGL
                 }
             }
         }
+
+        public string Version => _version;
+
+        public string ShadingLanguageVersion => _shadingLanguageVersion;
 
         public OpenGLTextureSamplerManager TextureSamplerManager => _textureSamplerManager;
 
@@ -124,9 +135,11 @@ namespace Veldrid.OpenGL
             _swapBuffers = platformInfo.SwapBuffers;
             _setSyncToVBlank = platformInfo.SetSyncToVerticalBlank;
             LoadGetString(_glContext, platformInfo.GetProcAddress);
-            string version = Util.GetString(glGetString(StringName.Version));
+            _version = Util.GetString(glGetString(StringName.Version));
+            _shadingLanguageVersion = Util.GetString(glGetString(StringName.ShadingLanguageVersion));
+            _vendorName = Util.GetString(glGetString(StringName.Vendor));
             _deviceName = Util.GetString(glGetString(StringName.Renderer));
-            _backendType = version.StartsWith("OpenGL ES") ? GraphicsBackend.OpenGLES : GraphicsBackend.OpenGL;
+            _backendType = _version.StartsWith("OpenGL ES") ? GraphicsBackend.OpenGLES : GraphicsBackend.OpenGL;
 
             LoadAllFunctions(_glContext, platformInfo.GetProcAddress, _backendType == GraphicsBackend.OpenGLES);
 
@@ -136,8 +149,13 @@ namespace Veldrid.OpenGL
             glGetIntegerv(GetPName.MinorVersion, &minorVersion);
             CheckLastError();
 
-            MajorVersion = majorVersion;
-            MinorVersion = minorVersion;
+            GraphicsApiVersion.TryParseGLVersion(_version, out _apiVersion);
+            if (_apiVersion.Major != majorVersion ||
+                _apiVersion.Minor != minorVersion)
+            {
+                // This mismatch should never be hit in valid OpenGL implementations.
+                _apiVersion = new GraphicsApiVersion(majorVersion, minorVersion, 0, 0);
+            }
 
             int extensionCount;
             glGetIntegerv(GetPName.NumExtensions, &extensionCount);
@@ -155,7 +173,7 @@ namespace Veldrid.OpenGL
                 }
             }
 
-            _extensions = new OpenGLExtensions(extensions, _backendType, MajorVersion, MinorVersion);
+            _extensions = new OpenGLExtensions(extensions, _backendType, majorVersion, minorVersion);
 
             bool drawIndirect = _extensions.DrawIndirect || _extensions.MultiDrawIndirect;
             _features = new GraphicsDeviceFeatures(

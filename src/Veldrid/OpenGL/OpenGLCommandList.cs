@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Veldrid.OpenGL.NoAllocEntryList;
+using Veldrid.OpenGL.EntryList;
 
 namespace Veldrid.OpenGL
 {
@@ -52,7 +52,7 @@ namespace Veldrid.OpenGL
                 }
                 else
                 {
-                    return new OpenGLNoAllocCommandEntryList(this);
+                    return new OpenGLCommandEntryList(this);
                 }
             }
         }
@@ -122,14 +122,14 @@ namespace Veldrid.OpenGL
             _currentCommands.SetPipeline(pipeline);
         }
 
-        protected override void SetGraphicsResourceSetCore(uint slot, ResourceSet rs, uint dynamicOffsetCount, ref uint dynamicOffsets)
+        protected override void SetGraphicsResourceSetCore(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets)
         {
-            _currentCommands.SetGraphicsResourceSet(slot, rs, dynamicOffsetCount, ref dynamicOffsets);
+            _currentCommands.SetGraphicsResourceSet(slot, rs, dynamicOffsets);
         }
 
-        protected override void SetComputeResourceSetCore(uint slot, ResourceSet rs, uint dynamicOffsetCount, ref uint dynamicOffsets)
+        protected override void SetComputeResourceSetCore(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets)
         {
-            _currentCommands.SetComputeResourceSet(slot, rs, dynamicOffsetCount, ref dynamicOffsets);
+            _currentCommands.SetComputeResourceSet(slot, rs, dynamicOffsets);
         }
 
         public override void SetScissorRect(uint index, uint x, uint y, uint width, uint height)

@@ -19,6 +19,10 @@ namespace Veldrid.Vk
         private VkInstance _instance;
         private VkPhysicalDevice _physicalDevice;
         private string _deviceName;
+        private string _vendorName;
+        private GraphicsApiVersion _apiVersion;
+        private string _driverName;
+        private string _driverInfo;
         private VkDeviceMemoryManager _memoryManager;
         private VkPhysicalDeviceProperties _physicalDeviceProperties;
         private VkPhysicalDeviceFeatures _physicalDeviceFeatures;
@@ -47,6 +51,7 @@ namespace Veldrid.Vk
         private bool _standardClipYDirection;
         private vkGetBufferMemoryRequirements2_t _getBufferMemoryRequirements2;
         private vkGetImageMemoryRequirements2_t _getImageMemoryRequirements2;
+        private vkGetPhysicalDeviceProperties2_t _getPhysicalDeviceProperties2;
         private vkCreateMetalSurfaceEXT_t _createMetalSurfaceEXT;
 
         // Staging Resources
@@ -65,6 +70,10 @@ namespace Veldrid.Vk
             = new Dictionary<VkCommandBuffer, SharedCommandPool>();
 
         public override string DeviceName => _deviceName;
+
+        public override string VendorName => _vendorName;
+
+        public override GraphicsApiVersion ApiVersion => _apiVersion;
 
         public override GraphicsBackend BackendType => GraphicsBackend.Vulkan;
 
@@ -91,6 +100,8 @@ namespace Veldrid.Vk
         public VkQueue GraphicsQueue => _graphicsQueue;
         public uint GraphicsQueueIndex => _graphicsQueueIndex;
         public uint PresentQueueIndex => _presentQueueIndex;
+        public string DriverName => _driverName;
+        public string DriverInfo => _driverInfo;
         public VkDeviceMemoryManager MemoryManager => _memoryManager;
         public VkDescriptorPoolManager DescriptorPoolManager => _descriptorPoolManager;
         public vkCmdDebugMarkerBeginEXT_t MarkerBegin => _markerBegin;
@@ -507,6 +518,12 @@ namespace Veldrid.Vk
                 instanceExtensions.Add(ext);
             }
 
+            bool hasDeviceProperties2 = availableInstanceExtensions.Contains(CommonStrings.VK_KHR_get_physical_device_properties2);
+            if (hasDeviceProperties2)
+            {
+                instanceExtensions.Add(CommonStrings.VK_KHR_get_physical_device_properties2);
+            }
+
             string[] requestedInstanceExtensions = options.InstanceExtensions ?? Array.Empty<string>();
             List<FixedUtf8String> tempStrings = new List<FixedUtf8String>();
             foreach (string requiredExt in requestedInstanceExtensions)
@@ -556,6 +573,12 @@ namespace Veldrid.Vk
             if (debug && debugReportExtensionAvailable)
             {
                 EnableDebugCallback();
+            }
+
+            if (hasDeviceProperties2)
+            {
+                _getPhysicalDeviceProperties2 = GetInstanceProcAddr<vkGetPhysicalDeviceProperties2_t>("vkGetPhysicalDeviceProperties2")
+                    ?? GetInstanceProcAddr<vkGetPhysicalDeviceProperties2_t>("vkGetPhysicalDeviceProperties2KHR");
             }
 
             foreach (FixedUtf8String tempStr in tempStrings)
@@ -643,9 +666,27 @@ namespace Veldrid.Vk
                 _deviceName = Encoding.UTF8.GetString(utf8NamePtr, (int)MaxPhysicalDeviceNameSize).TrimEnd('\0');
             }
 
+            _vendorName = "id:" + _physicalDeviceProperties.vendorID.ToString("x8");
+            _apiVersion = GraphicsApiVersion.Unknown;
+            _driverInfo = "version:" + _physicalDeviceProperties.driverVersion.ToString("x8");
+
             vkGetPhysicalDeviceFeatures(_physicalDevice, out _physicalDeviceFeatures);
 
             vkGetPhysicalDeviceMemoryProperties(_physicalDevice, out _physicalDeviceMemProperties);
+        }
+
+        public VkExtensionProperties[] GetDeviceExtensionProperties()
+        {
+            uint propertyCount = 0;
+            VkResult result = vkEnumerateDeviceExtensionProperties(_physicalDevice, (byte*)null, &propertyCount, null);
+            CheckResult(result);
+            VkExtensionProperties[] props = new VkExtensionProperties[(int)propertyCount];
+            fixed (VkExtensionProperties* properties = props)
+            {
+                result = vkEnumerateDeviceExtensionProperties(_physicalDevice, (byte*)null, &propertyCount, properties);
+                CheckResult(result);
+            }
+            return props;
         }
 
         private void CreateLogicalDevice(VkSurfaceKHR surface, bool preferStandardClipY, VulkanDeviceOptions options)
@@ -670,53 +711,60 @@ namespace Veldrid.Vk
 
             VkPhysicalDeviceFeatures deviceFeatures = _physicalDeviceFeatures;
 
-            uint propertyCount = 0;
-            VkResult result = vkEnumerateDeviceExtensionProperties(_physicalDevice, (byte*)null, &propertyCount, null);
-            CheckResult(result);
-            VkExtensionProperties* properties = stackalloc VkExtensionProperties[(int)propertyCount];
-            result = vkEnumerateDeviceExtensionProperties(_physicalDevice, (byte*)null, &propertyCount, properties);
-            CheckResult(result);
+            VkExtensionProperties[] props = GetDeviceExtensionProperties();
 
             HashSet<string> requiredInstanceExtensions = new HashSet<string>(options.DeviceExtensions ?? Array.Empty<string>());
 
             bool hasMemReqs2 = false;
             bool hasDedicatedAllocation = false;
-            StackList<IntPtr> extensionNames = new StackList<IntPtr>();
-            for (int property = 0; property < propertyCount; property++)
+            bool hasDriverProperties = false;
+            IntPtr[] activeExtensions = new IntPtr[props.Length];
+            uint activeExtensionCount = 0;
+
+            fixed (VkExtensionProperties* properties = props)
             {
-                string extensionName = Util.GetString(properties[property].extensionName);
-                if (extensionName == "VK_EXT_debug_marker")
+                for (int property = 0; property < props.Length; property++)
                 {
-                    extensionNames.Add(CommonStrings.VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-                    requiredInstanceExtensions.Remove(extensionName);
-                    _debugMarkerEnabled = true;
-                }
-                else if (extensionName == "VK_KHR_swapchain")
-                {
-                    extensionNames.Add((IntPtr)properties[property].extensionName);
-                    requiredInstanceExtensions.Remove(extensionName);
-                }
-                else if (preferStandardClipY && extensionName == "VK_KHR_maintenance1")
-                {
-                    extensionNames.Add((IntPtr)properties[property].extensionName);
-                    requiredInstanceExtensions.Remove(extensionName);
-                    _standardClipYDirection = true;
-                }
-                else if (extensionName == "VK_KHR_get_memory_requirements2")
-                {
-                    extensionNames.Add((IntPtr)properties[property].extensionName);
-                    requiredInstanceExtensions.Remove(extensionName);
-                    hasMemReqs2 = true;
-                }
-                else if (extensionName == "VK_KHR_dedicated_allocation")
-                {
-                    extensionNames.Add((IntPtr)properties[property].extensionName);
-                    requiredInstanceExtensions.Remove(extensionName);
-                    hasDedicatedAllocation = true;
-                }
-                else if (requiredInstanceExtensions.Remove(extensionName))
-                {
-                    extensionNames.Add((IntPtr)properties[property].extensionName);
+                    string extensionName = Util.GetString(properties[property].extensionName);
+                    if (extensionName == "VK_EXT_debug_marker")
+                    {
+                        activeExtensions[activeExtensionCount++] = CommonStrings.VK_EXT_DEBUG_MARKER_EXTENSION_NAME;
+                        requiredInstanceExtensions.Remove(extensionName);
+                        _debugMarkerEnabled = true;
+                    }
+                    else if (extensionName == "VK_KHR_swapchain")
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                        requiredInstanceExtensions.Remove(extensionName);
+                    }
+                    else if (preferStandardClipY && extensionName == "VK_KHR_maintenance1")
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                        requiredInstanceExtensions.Remove(extensionName);
+                        _standardClipYDirection = true;
+                    }
+                    else if (extensionName == "VK_KHR_get_memory_requirements2")
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                        requiredInstanceExtensions.Remove(extensionName);
+                        hasMemReqs2 = true;
+                    }
+                    else if (extensionName == "VK_KHR_dedicated_allocation")
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                        requiredInstanceExtensions.Remove(extensionName);
+                        hasDedicatedAllocation = true;
+                    }
+                    else if (extensionName == "VK_KHR_driver_properties")
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                        requiredInstanceExtensions.Remove(extensionName);
+                        hasDriverProperties = true;
+                    }
+                    else if (requiredInstanceExtensions.Remove(extensionName))
+                    {
+                        activeExtensions[activeExtensionCount++] = (IntPtr)properties[property].extensionName;
+                    }
                 }
             }
 
@@ -741,11 +789,14 @@ namespace Veldrid.Vk
             deviceCreateInfo.enabledLayerCount = layerNames.Count;
             deviceCreateInfo.ppEnabledLayerNames = (byte**)layerNames.Data;
 
-            deviceCreateInfo.enabledExtensionCount = extensionNames.Count;
-            deviceCreateInfo.ppEnabledExtensionNames = (byte**)extensionNames.Data;
+            fixed (IntPtr* activeExtensionsPtr = activeExtensions)
+            {
+                deviceCreateInfo.enabledExtensionCount = activeExtensionCount;
+                deviceCreateInfo.ppEnabledExtensionNames = (byte**)activeExtensionsPtr;
 
-            result = vkCreateDevice(_physicalDevice, ref deviceCreateInfo, null, out _device);
-            CheckResult(result);
+                VkResult result = vkCreateDevice(_physicalDevice, ref deviceCreateInfo, null, out _device);
+                CheckResult(result);
+            }
 
             vkGetDeviceQueue(_device, _graphicsQueueIndex, 0, out _graphicsQueue);
 
@@ -766,6 +817,22 @@ namespace Veldrid.Vk
                     ?? GetDeviceProcAddr<vkGetBufferMemoryRequirements2_t>("vkGetBufferMemoryRequirements2KHR");
                 _getImageMemoryRequirements2 = GetDeviceProcAddr<vkGetImageMemoryRequirements2_t>("vkGetImageMemoryRequirements2")
                     ?? GetDeviceProcAddr<vkGetImageMemoryRequirements2_t>("vkGetImageMemoryRequirements2KHR");
+            }
+            if (_getPhysicalDeviceProperties2 != null && hasDriverProperties)
+            {
+                VkPhysicalDeviceDriverProperties driverProps = VkPhysicalDeviceDriverProperties.New();
+                _getPhysicalDeviceProperties2(_physicalDevice, &driverProps);
+
+                string driverName = Encoding.UTF8.GetString(
+                    driverProps.driverName, VkPhysicalDeviceDriverProperties.DriverNameLength).TrimEnd('\0');
+
+                string driverInfo = Encoding.UTF8.GetString(
+                    driverProps.driverInfo, VkPhysicalDeviceDriverProperties.DriverInfoLength).TrimEnd('\0');
+
+                VkConformanceVersion conforming = driverProps.conformanceVersion;
+                _apiVersion = new GraphicsApiVersion(conforming.major, conforming.minor, conforming.subminor, conforming.patch);
+                _driverName = driverName;
+                _driverInfo = driverInfo;
             }
         }
 
@@ -1130,11 +1197,15 @@ namespace Veldrid.Vk
             lock (_graphicsCommandPoolLock)
             {
                 if (_sharedGraphicsCommandPools.Count > 0)
+                {
                     sharedPool = _sharedGraphicsCommandPools.Pop();
+                }
             }
 
             if (sharedPool == null)
+            {
                 sharedPool = new SharedCommandPool(this, false);
+            }
 
             return sharedPool;
         }
@@ -1514,6 +1585,8 @@ namespace Veldrid.Vk
     internal unsafe delegate void vkGetBufferMemoryRequirements2_t(VkDevice device, VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements);
     internal unsafe delegate void vkGetImageMemoryRequirements2_t(VkDevice device, VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements);
 
+    internal unsafe delegate void vkGetPhysicalDeviceProperties2_t(VkPhysicalDevice physicalDevice, void* properties);
+
     // VK_EXT_metal_surface
 
     internal unsafe delegate VkResult vkCreateMetalSurfaceEXT_t(
@@ -1530,5 +1603,36 @@ namespace Veldrid.Vk
         public void* pNext;
         public uint flags;
         public void* pLayer;
+    }
+
+    internal unsafe struct VkPhysicalDeviceDriverProperties
+    {
+        public const int DriverNameLength = 256;
+        public const int DriverInfoLength = 256;
+        public const VkStructureType VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES = (VkStructureType)1000196000;
+
+        public VkStructureType sType;
+        public void* pNext;
+        public VkDriverId driverID;
+        public fixed byte driverName[DriverNameLength];
+        public fixed byte driverInfo[DriverInfoLength];
+        public VkConformanceVersion conformanceVersion;
+
+        public static VkPhysicalDeviceDriverProperties New()
+        {
+            return new VkPhysicalDeviceDriverProperties() { sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES };
+        }
+    }
+
+    internal enum VkDriverId
+    {
+    }
+
+    internal struct VkConformanceVersion
+    {
+        public byte major;
+        public byte minor;
+        public byte subminor;
+        public byte patch;
     }
 }

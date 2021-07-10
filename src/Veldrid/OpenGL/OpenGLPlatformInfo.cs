@@ -12,39 +12,48 @@ namespace Veldrid.OpenGL
         /// The OpenGL context handle.
         /// </summary>
         public IntPtr OpenGLContextHandle { get; }
+
         /// <summary>
         /// A delegate which can be used to retrieve OpenGL function pointers by name.
         /// </summary>
         public Func<string, IntPtr> GetProcAddress { get; }
+
         /// <summary>
         /// A delegate which can be used to make the given OpenGL context current on the calling thread.
         /// </summary>
         public Action<IntPtr> MakeCurrent { get; }
+
         /// <summary>
         /// A delegate which can be used to retrieve the calling thread's active OpenGL context.
         /// </summary>
         public Func<IntPtr> GetCurrentContext { get; }
+
         /// <summary>
         /// A delegate which can be used to clear the calling thread's GL context.
         /// </summary>
         public Action ClearCurrentContext { get; }
+
         /// <summary>
         /// A delegate which can be used to delete the given context.
         /// </summary>
         public Action<IntPtr> DeleteContext { get; }
+
         /// <summary>
         /// A delegate which can be used to swap the main back buffer associated with the OpenGL context.
         /// </summary>
         public Action SwapBuffers { get; }
+
         /// <summary>
         /// A delegate which can be used to set the synchronization behavior of the OpenGL context.
         /// </summary>
         public Action<bool> SetSyncToVerticalBlank { get; }
+
         /// <summary>
         /// A delegate which can be used to set the framebuffer used to render to the application Swapchain.
         /// If this is null, the default FBO (0) will be bound.
         /// </summary>
         public Action SetSwapchainFramebuffer { get; }
+
         /// <summary>
         /// A delegate which is invoked when the main Swapchain is resized. This may be null, in which case
         /// no special action is taken when the Swapchain is resized.

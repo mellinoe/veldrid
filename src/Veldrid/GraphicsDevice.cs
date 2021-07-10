@@ -23,6 +23,16 @@ namespace Veldrid
         public abstract string DeviceName { get; }
 
         /// <summary>
+        /// Gets the name of the device vendor.
+        /// </summary>
+        public abstract string VendorName { get; }
+
+        /// <summary>
+        /// Gets the API version of the graphics backend.
+        /// </summary>
+        public abstract GraphicsApiVersion ApiVersion { get; }
+
+        /// <summary>
         /// Gets a value identifying the specific graphics API used by this instance.
         /// </summary>
         public abstract GraphicsBackend BackendType { get; }
@@ -461,7 +471,7 @@ namespace Veldrid
             ValidateUpdateTextureParameters(texture, sizeInBytes, x, y, z, width, height, depth, mipLevel, arrayLayer);
 #endif
 
-            fixed (void* pin = &MemoryMarshal.GetReference(source))
+            fixed (T* pin = source)
             {
                 UpdateTextureCore(
                 texture,
@@ -558,11 +568,7 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             T source) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
-            {
-                UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, (uint)sizeof(T));
-            }
+            UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)(&source), (uint)sizeof(T));
         }
 
         /// <summary>
@@ -579,8 +585,7 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             ref T source) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
+            fixed (T* ptr = &source)
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, (uint)sizeof(T));
             }
@@ -602,8 +607,7 @@ namespace Veldrid
             ref T source,
             uint sizeInBytes) where T : unmanaged
         {
-            ref byte sourceByteRef = ref Unsafe.AsRef<byte>(Unsafe.AsPointer(ref source));
-            fixed (byte* ptr = &sourceByteRef)
+            fixed (T* ptr = &source)
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)ptr, sizeInBytes);
             }
@@ -640,7 +644,7 @@ namespace Veldrid
             uint bufferOffsetInBytes,
             ReadOnlySpan<T> source) where T : unmanaged
         {
-            fixed (void* pin = &MemoryMarshal.GetReference(source))
+            fixed (T* pin = source)
             {
                 UpdateBuffer(buffer, bufferOffsetInBytes, (IntPtr)pin, (uint)(sizeof(T) * source.Length));
             }
@@ -870,6 +874,31 @@ namespace Veldrid
             if (!GetOpenGLInfo(out BackendInfoOpenGL info))
             {
                 throw new VeldridException($"{nameof(GetOpenGLInfo)} can only be used on an OpenGL GraphicsDevice.");
+            }
+
+            return info;
+        }
+#endif
+
+#if !EXCLUDE_METAL_BACKEND
+        /// <summary>
+        /// Tries to get a <see cref="BackendInfoMetal"/> for this instance.
+        /// This method will only succeed if this is a Metal GraphicsDevice.
+        /// </summary>
+        /// <param name="info">If successful, this will contain the <see cref="BackendInfoOpenGL"/> for this instance.</param>
+        /// <returns>True if this is an Metal GraphicsDevice and the operation was successful. False otherwise.</returns>
+        public virtual bool GetMetalInfo(out BackendInfoMetal info) { info = null; return false; }
+
+        /// <summary>
+        /// Gets a <see cref="BackendInfoMetal"/> for this instance. This method will only succeed if this is an OpenGL
+        /// GraphicsDevice. Otherwise, this method will throw an exception.
+        /// </summary>
+        /// <returns>The <see cref="BackendInfoMetal"/> for this instance.</returns>
+        public BackendInfoMetal GetMetalInfo()
+        {
+            if (!GetMetalInfo(out BackendInfoMetal info))
+            {
+                throw new VeldridException($"{nameof(GetMetalInfo)} can only be used on a Metal GraphicsDevice.");
             }
 
             return info;

@@ -18,6 +18,9 @@ namespace Veldrid.D3D11
         private readonly IDXGIAdapter _dxgiAdapter;
         private readonly ID3D11Device _device;
         private readonly string _deviceName;
+        private readonly string _vendorName;
+        private readonly GraphicsApiVersion _apiVersion;
+        private readonly int _deviceId;
         private readonly ID3D11DeviceContext _immediateContext;
         private readonly D3D11ResourceFactory _d3d11ResourceFactory;
         private readonly D3D11Swapchain _mainSwapchain;
@@ -34,6 +37,10 @@ namespace Veldrid.D3D11
         private readonly List<D3D11Buffer> _availableStagingBuffers = new List<D3D11Buffer>();
 
         public override string DeviceName => _deviceName;
+
+        public override string VendorName => _vendorName;
+
+        public override GraphicsApiVersion ApiVersion => _apiVersion;
 
         public override GraphicsBackend BackendType => GraphicsBackend.Direct3D11;
 
@@ -54,6 +61,8 @@ namespace Veldrid.D3D11
         public bool SupportsConcurrentResources => _supportsConcurrentResources;
 
         public bool SupportsCommandLists => _supportsCommandLists;
+
+        public int DeviceId => _deviceId;
 
         public override Swapchain MainSwapchain => _mainSwapchain;
 
@@ -117,7 +126,42 @@ namespace Veldrid.D3D11
                 // Store a pointer to the DXGI adapter.
                 // This is for the case of no preferred DXGI adapter, or fallback to WARP.
                 dxgiDevice.GetAdapter(out _dxgiAdapter).CheckError();
-                _deviceName = _dxgiAdapter.Description.Description;
+
+                AdapterDescription desc = _dxgiAdapter.Description;
+                _deviceName = desc.Description;
+                _vendorName = "id:" + ((uint)desc.VendorId).ToString("x8");
+                _deviceId = desc.DeviceId;
+            }
+
+            switch (_device.FeatureLevel)
+            {
+                case Vortice.Direct3D.FeatureLevel.Level_10_0:
+                    _apiVersion = new GraphicsApiVersion(10, 0, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_10_1:
+                    _apiVersion = new GraphicsApiVersion(10, 1, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_11_0:
+                    _apiVersion = new GraphicsApiVersion(11, 0, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_11_1:
+                    _apiVersion = new GraphicsApiVersion(11, 1, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_12_0:
+                    _apiVersion = new GraphicsApiVersion(12, 0, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_12_1:
+                    _apiVersion = new GraphicsApiVersion(12, 1, 0, 0);
+                    break;
+
+                case Vortice.Direct3D.FeatureLevel.Level_12_2:
+                    _apiVersion = new GraphicsApiVersion(12, 2, 0, 0);
+                    break;
             }
 
             if (swapchainDesc != null)
