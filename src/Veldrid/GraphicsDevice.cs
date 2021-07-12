@@ -13,6 +13,9 @@ namespace Veldrid
     {
         private readonly object _deferredDisposalLock = new object();
         private readonly List<IDisposable> _disposables = new List<IDisposable>();
+        private readonly List<IDisposable> _autoDisposables = new List<IDisposable>();
+        private long _autoDisposeThreshold;
+        private long _autoDisposeCounter;
         private Sampler _aniso4xSampler;
 
         internal GraphicsDevice() { }
@@ -29,7 +32,7 @@ namespace Veldrid
 
         /// <summary>
         /// Gets a value identifying whether texture coordinates begin in the top left corner of a Texture.
-        /// If true, (0, 0) refers to the top-left texel of a Texture. If false, (0, 0) refers to the bottom-left 
+        /// If true, (0, 0) refers to the top-left texel of a Texture. If false, (0, 0) refers to the bottom-left
         /// texel of a Texture. This property is useful for determining how the output of a Framebuffer should be sampled.
         /// </summary>
         public abstract bool IsUvOriginTopLeft { get; }
@@ -95,6 +98,28 @@ namespace Veldrid
         /// accepting dynamic offsets, each offset must be a multiple of this value.
         /// </summary>
         public uint StructuredBufferMinOffsetAlignment => GetStructuredBufferMinOffsetAlignmentCore();
+
+        /// <summary>
+        /// A threshold to control the automatic disposals of <see cref="IDisposable"/> objects added through <see cref="AutoDisposeWhenIdle(IDisposable, long)"/>.
+        /// <br/>
+        /// When the total estimated size from <see cref="AddAutoDisposePressure(long)"/> or <see cref="AutoDisposeWhenIdle(IDisposable, long)"/>
+        /// reaches the given threshold value, this graphics device will block until it becomes idle,
+        /// and then it will dispose all objects pending for dispose added through <see cref="AutoDisposeWhenIdle(IDisposable, long)"/>.
+        /// <br/>
+        /// In particular, a threshold of 0 will cause <see cref="AutoDisposeWhenIdle(IDisposable, long)"/> with a non-negative hint size to block on each call.
+        /// <br/>
+        /// To maintain backward compatibility, <see cref="IDisposable"/> objects added through <see cref="DisposeWhenIdle(IDisposable)"/>
+        /// will <i>not</i> be disposed automatically, they still need to be disposed by using <see cref="WaitForIdle()"/> or <see cref="Dispose()"/>.
+        /// </summary>
+        public long AutoDisposeThreshold
+        {
+            get { lock (_deferredDisposalLock) { return _autoDisposeThreshold; } }
+            set
+            {
+                lock (_deferredDisposalLock) { _autoDisposeThreshold = value; }
+                AddAutoDisposePressure(0); // starts a check
+            }
+        }
 
         internal abstract uint GetUniformBufferMinOffsetAlignmentCore();
         internal abstract uint GetStructuredBufferMinOffsetAlignmentCore();
@@ -713,17 +738,73 @@ namespace Veldrid
             out PixelFormatProperties properties);
 
         /// <summary>
-        /// Adds the given object to a deferred disposal list, which will be processed when this GraphicsDevice becomes idle.
+        /// Adds the given object to a deferred disposal list, which will be processed when this GraphicsDevice becomes idle,
+        /// or more specifically, when <see cref="WaitForIdle()"/> has been called.
         /// This method can be used to safely dispose a device resource which may be in use at the time this method is called,
         /// but which will no longer be in use when the device is idle.
         /// </summary>
         /// <param name="disposable">An object to dispose when this instance becomes idle.</param>
         public void DisposeWhenIdle(IDisposable disposable)
         {
+            if (disposable == null)
+            {
+                return;
+            }
             lock (_deferredDisposalLock)
             {
                 _disposables.Add(disposable);
             }
+        }
+
+        /// <summary>
+        /// Informs that the given <paramref name="disposable"/> object, with an estimated size of <paramref name="hintSize"/> bytes,
+        /// should be disposed when this GraphicsDevice becomes idle.
+        /// If these objects pending for dispose, have a total estimated size that exceeds <see cref="AutoDisposeThreshold"/>,
+        /// then this method will block until the device becomes idle, and it will subsequently dispose all objects added through this method.
+        /// In addition, an explicit call to <see cref="WaitForIdle()"/> or <see cref="Dispose()"/> can also be used to dispose them.
+        /// <br/>
+        /// This method can be used to safely dispose a device resource which may be in use at the time this method is called,
+        /// but which will no longer be in use when the device is idle.
+        /// <br/>
+        /// To maintain backward compatibility, <see cref="IDisposable"/> objects added through <see cref="DisposeWhenIdle(IDisposable)"/>
+        /// will <i>not</i> be automatically disposed by this method.
+        /// They still need to be disposed by using <see cref="WaitForIdle()"/> or <see cref="Dispose()"/>.
+        /// </summary>
+        /// <param name="disposable">An object to dispose when this instance becomes idle.</param>
+        /// <param name="hintSize">The estimated size of the given <paramref name="disposable"/> object.</param>
+        public void AutoDisposeWhenIdle(IDisposable disposable, long hintSize)
+        {
+            lock (_deferredDisposalLock)
+            {
+                if (disposable != null)
+                {
+                    _autoDisposables.Add(disposable);
+                }
+                _autoDisposeCounter += hintSize;
+                if (_autoDisposeCounter < _autoDisposeThreshold)
+                {
+                    return;
+                }
+            }
+            // _autoDisposeCounter >= _autoDisposeThreshold
+            WaitForIdleCore();
+            FlushDeferredAutoDisposals();
+        }
+
+        /// <summary>
+        /// Updates the estimated size of objects pending for dispose added through <see cref="AutoDisposeWhenIdle(IDisposable, long)"/>.
+        /// If the estimated size reaches <see cref="AutoDisposeThreshold"/>, this method will block until this
+        /// <see cref="GraphicsDevice"/> becomes idle,
+        /// and then it will dispose all objects added through <see cref="AutoDisposeWhenIdle(IDisposable, long)"/>.
+        /// <br/>
+        /// To maintain backward compatibility, <see cref="IDisposable"/> objects added through <see cref="DisposeWhenIdle(IDisposable)"/>
+        /// will <i>not</i> be automatically disposed by this method.
+        /// They still need to be disposed by using <see cref="WaitForIdle()"/> or <see cref="Dispose()"/>.
+        /// </summary>
+        /// <param name="hintSize">The amount to be added to the current estimated size.</param>
+        public void AddAutoDisposePressure(long hintSize)
+        {
+            AutoDisposeWhenIdle(null, hintSize);
         }
 
         private void FlushDeferredDisposals()
@@ -735,6 +816,20 @@ namespace Veldrid
                     disposable.Dispose();
                 }
                 _disposables.Clear();
+                FlushDeferredAutoDisposals();
+            }
+        }
+
+        private void FlushDeferredAutoDisposals()
+        {
+            lock (_deferredDisposalLock)
+            {
+                foreach (IDisposable disposable in _autoDisposables)
+                {
+                    disposable.Dispose();
+                }
+                _autoDisposables.Clear();
+                _autoDisposeCounter = 0;
             }
         }
 
