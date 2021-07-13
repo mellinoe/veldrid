@@ -83,7 +83,7 @@ namespace Veldrid.MTL
             }
 
             PixelFormat format = description.ColorSrgb
-                ? PixelFormat.B8_G8_R8_A8_UNorm_SRgb
+                ? PixelFormat.R16_G16_B16_A16_Float; // Deep Color (DCI-P3 support for Retina Display)
                 : PixelFormat.B8_G8_R8_A8_UNorm;
 
             _metalLayer.device = _gd.Device;
