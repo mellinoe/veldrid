@@ -10,7 +10,6 @@ namespace Veldrid.OpenGL
     {
         private readonly OpenGLGraphicsDevice _gd;
         private uint _buffer;
-        private bool _dynamic;
         private bool _disposeRequested;
 
         private string _name;
@@ -31,7 +30,6 @@ namespace Veldrid.OpenGL
         {
             _gd = gd;
             SizeInBytes = sizeInBytes;
-            _dynamic = (usage & BufferUsage.Dynamic) == BufferUsage.Dynamic;
             Usage = usage;
         }
 
@@ -55,6 +53,20 @@ namespace Veldrid.OpenGL
         {
             Debug.Assert(!Created);
 
+            BufferUsageHint hint;
+            if ((Usage & BufferUsage.Staging) == BufferUsage.Staging)
+            {
+                hint = BufferUsageHint.StreamCopy;
+            }
+            else if ((Usage & BufferUsage.Dynamic) == BufferUsage.Dynamic)
+            {
+                hint = BufferUsageHint.DynamicDraw;
+            }
+            else
+            {
+                hint = BufferUsageHint.StaticDraw;
+            }
+
             if (_gd.Extensions.ARB_DirectStateAccess)
             {
                 uint buffer;
@@ -66,7 +78,7 @@ namespace Veldrid.OpenGL
                     _buffer,
                     SizeInBytes,
                     null,
-                    _dynamic ? BufferUsageHint.DynamicDraw : BufferUsageHint.StaticDraw);
+                    hint);
                 CheckLastError();
             }
             else
@@ -81,7 +93,7 @@ namespace Veldrid.OpenGL
                     BufferTarget.CopyReadBuffer,
                     (UIntPtr)SizeInBytes,
                     null,
-                    _dynamic ? BufferUsageHint.DynamicDraw : BufferUsageHint.StaticDraw);
+                    hint);
                 CheckLastError();
             }
 
