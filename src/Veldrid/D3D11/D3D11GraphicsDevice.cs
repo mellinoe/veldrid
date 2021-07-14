@@ -372,6 +372,10 @@ namespace Veldrid.D3D11
                         Debug.Assert(result);
                     }
                 }
+                else
+                {
+                    _mappedResources[key] = info;
+                }
             }
         }
 
